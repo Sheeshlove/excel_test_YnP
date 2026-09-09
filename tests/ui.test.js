@@ -166,6 +166,18 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  ✗ 
   const xpAfter = await page.evaluate(() => window.XLStore.data.xp);
   check(xpBefore === xpAfter && xpAfter > 0, 'прогресс сохраняется между перезагрузками');
 
+  // --- ⌘Z отменяет введённую формулу
+  await page.goto(base + '#/1/1.1');
+  await page.waitForSelector('table.sheet');
+  await page.locator('td[data-r="3"][data-c="3"]').click();
+  await page.keyboard.type('=B4*2');
+  await page.keyboard.press('Enter');
+  check((await page.locator('td[data-r="3"][data-c="3"] .cv').textContent()) === '5600', '⌘Z: формула введена');
+  await page.locator('td[data-r="3"][data-c="3"]').click();
+  await page.keyboard.press('Meta+z');
+  const afterUndo = await page.locator('td[data-r="3"][data-c="3"] .cv').textContent();
+  check(afterUndo === '', '⌘Z отменяет ввод формулы (получено «' + afterUndo + '»)');
+
   // --- матрица 4.5: одна формула на 25 ячеек через ⌘D и ⌘R
   await page.goto(base + '#/4/4.5');
   await page.waitForSelector('table.sheet');

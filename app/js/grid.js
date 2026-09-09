@@ -250,6 +250,7 @@
   Grid.prototype.commitEdit = function () {
     if (!this.editing) return;
     var e = this.editing, text = e.input.value;
+    if (text !== this.sheet.raw(e.r, e.c)) this.snapshot();
     this.editing = null;
     this.sheet.set(e.r, e.c, text, { locked: false });
     var td = this.cellEl(e.r, e.c);

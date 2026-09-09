@@ -58,6 +58,18 @@ CUR.levels.forEach(level => {
 
     // 5. задача должна иметь баллы
     check(typeof task.points === 'number' && task.points > 0, `${tag}: не заданы баллы`);
+
+    // 6. каждый адрес, названный в условии или подсказке, должен существовать
+    //    на листе — иначе ученик ищет ячейку, которой нет
+    const targets = new Set(G.targetCells(task));
+    const data = new Set(Object.keys((task.sheet && task.sheet.cells) || {}));
+    const text = (task.brief + ' ' + task.hint).replace(/«[^»]*»/g, '');
+    const refs = text.match(/(?<![A-Za-zА-Яа-яЁё0-9])\$?[A-Z]{1,2}\$?\d{1,3}(?::\$?[A-Z]{1,2}\$?\d{1,3})?(?![A-Za-zА-Яа-яЁё0-9])/g) || [];
+    refs.forEach(ref => {
+      const cells = G.expandRange(ref.replace(/\$/g, ''));
+      const ok = cells.every(c => targets.has(c) || data.has(c));
+      check(ok, `${tag}: в условии упомянут ${ref}, но такой ячейки на листе нет`);
+    });
   });
 });
 
