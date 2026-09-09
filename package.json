@@ -1,0 +1,17 @@
+{
+  "name": "excel-trainer-ynp",
+  "version": "1.0.0",
+  "description": "Тренажёр Excel для подготовки к тесту «Яков и Партнёры» (образовательный трек ВШМ СПбГУ)",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run-all.js",
+    "test:formula": "node tests/formula.test.js",
+    "test:curriculum": "node tests/curriculum.test.js",
+    "test:ui": "node tests/ui.test.js",
+    "start": "./run.sh",
+    "build": "./build_app.sh"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}
