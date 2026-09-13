@@ -1,5 +1,5 @@
 /* =============================================================================
- * engine.js — модель книги: ячейки, пересчёт, форматирование
+ * engine.js — the workbook model: cells, recalculation, formatting
  * ========================================================================== */
 (function (root, factory) {
   var XLF = (typeof module === 'object' && module.exports) ? require('./formula.js') : root.XLF;
@@ -19,11 +19,93 @@
     this.cols = opts.cols || 10;
     this.cells = {};            // "r:c" -> cell
     this.colWidths = {};
-    this.names = {};            // именованные диапазоны/константы
+    this.names = {};            // named ranges / constants
+    this.hiddenRows = {};       // row -> true (hidden by a filter)
+    this.table = null;          // {r1,c1,r2,c2} range the autofilter is attached to
+    this.filters = {};          // column -> {values:[...]} currently applied
+    this.sortState = null;      // {col, asc}
     this._cacheVal = {};
     this._stack = {};
     this._dirty = true;
   }
+
+  /* ------------------------------------------------- sorting and filtering */
+  // The autofilter is attached to a range whose first row holds the headers.
+  Sheet.prototype.attachTable = function (ref) {
+    var parts = String(ref).split(':');
+    var A = XLF.a1ToRC(parts[0]), B = XLF.a1ToRC(parts[1] || parts[0]);
+    if (!A || !B) return;
+    this.table = {
+      r1: Math.min(A.row, B.row), c1: Math.min(A.col, B.col),
+      r2: Math.max(A.row, B.row), c2: Math.max(A.col, B.col)
+    };
+  };
+
+  Sheet.prototype.isHidden = function (r) { return !!this.hiddenRows[r]; };
+
+  // Reads one data row as an array of raw strings.
+  Sheet.prototype.readRow = function (r, c1, c2) {
+    var out = [];
+    for (var c = c1; c <= c2; c++) out.push(this.raw(r, c));
+    return out;
+  };
+  Sheet.prototype.writeRow = function (r, c1, values) {
+    for (var i = 0; i < values.length; i++) this.set(r, c1 + i, values[i], { locked: true });
+  };
+
+  // Sorts the data rows of the attached table by one column.
+  Sheet.prototype.sortBy = function (col, asc) {
+    if (!this.table) return false;
+    var t = this.table, self = this;
+    var rows = [];
+    for (var r = t.r1 + 1; r <= t.r2; r++) {
+      rows.push({ key: this.value(r, col), data: this.readRow(r, t.c1, t.c2) });
+    }
+    rows.sort(function (a, b) {
+      var cmp = XLF.cmp(a.key === null ? '' : a.key, b.key === null ? '' : b.key);
+      return asc ? cmp : -cmp;
+    });
+    rows.forEach(function (row, i) { self.writeRow(t.r1 + 1 + i, t.c1, row.data); });
+    this.sortState = { col: col, asc: !!asc };
+    this.invalidate();
+    return true;
+  };
+
+  // Keeps only rows whose value in `col` is in `values`; null clears the filter.
+  Sheet.prototype.setFilter = function (col, values) {
+    if (values === null) delete this.filters[col];
+    else this.filters[col] = { values: values.slice() };
+    this.applyFilters();
+  };
+  Sheet.prototype.clearFilters = function () {
+    this.filters = {};
+    this.applyFilters();
+  };
+  Sheet.prototype.applyFilters = function () {
+    this.hiddenRows = {};
+    if (!this.table) return;
+    var t = this.table, cols = Object.keys(this.filters), self = this;
+    if (!cols.length) { this.invalidate(); return; }
+    for (var r = t.r1 + 1; r <= t.r2; r++) {
+      var keep = cols.every(function (c) {
+        var v = self.display(r, +c);
+        return self.filters[c].values.indexOf(v) >= 0;
+      });
+      if (!keep) this.hiddenRows[r] = true;
+    }
+    this.invalidate();
+  };
+
+  // Distinct displayed values of a column, for the filter dropdown.
+  Sheet.prototype.columnValues = function (col) {
+    if (!this.table) return [];
+    var out = [], seen = {};
+    for (var r = this.table.r1 + 1; r <= this.table.r2; r++) {
+      var v = this.display(r, col);
+      if (!Object.prototype.hasOwnProperty.call(seen, v)) { seen[v] = 1; out.push(v); }
+    }
+    return out.sort(function (a, b) { return XLF.cmp(a, b); });
+  };
 
   Sheet.prototype.cell = function (r, c) { return this.cells[key(r, c)] || null; };
 
@@ -42,7 +124,7 @@
     return !!(cell && cell.locked);
   };
 
-  /* --------------------------------------------------------- разбор ввода */
+  /* ------------------------------------------------------- parsing input */
   function parseInput(raw) {
     if (raw === null || raw === undefined) return { kind: 'empty', raw: '', value: null };
     var s = String(raw);
@@ -50,25 +132,31 @@
     if (s.charAt(0) === '=') return { kind: 'formula', raw: s, src: s.slice(1) };
 
     var t = s.trim();
-    // булево
+    // boolean
     var up = t.toUpperCase();
     if (up === 'ИСТИНА' || up === 'TRUE') return { kind: 'bool', raw: s, value: true };
     if (up === 'ЛОЖЬ' || up === 'FALSE') return { kind: 'bool', raw: s, value: false };
-    // процент
+    // percentage
     var pm = /^-?[\d\s]*[.,]?\d+\s*%$/.exec(t);
     if (pm) {
       var pv = parseFloat(t.replace(/\s/g, '').replace('%', '').replace(',', '.'));
       return { kind: 'number', raw: s, value: pv / 100, fmt: '0.0%' };
     }
-    // дата дд.мм.гггг
+    // a date
+    // dd/mm/yyyy and dd.mm.yyyy are both accepted; mm/dd/yyyy is assumed when
+    // the first number cannot be a day
     var dm = /^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/.exec(t);
     if (dm) {
+      var a = +dm[1], b = +dm[2];
+      var day = a, month = b;
+      if (a > 12 && b <= 12) { day = a; month = b; }
+      else if (b > 12 && a <= 12) { day = b; month = a; }
       return {
-        kind: 'number', raw: s, fmt: 'дд.мм.гггг',
-        value: XLF.ymdToSerial(+dm[3], +dm[2], +dm[1])
+        kind: 'number', raw: s, fmt: 'dd/mm/yyyy',
+        value: XLF.ymdToSerial(+dm[3], month, day)
       };
     }
-    // число (с пробелами-разделителями тысяч и запятой)
+    // a number (thousands separators and a decimal comma are tolerated)
     var cleaned = t.replace(/\s| /g, '').replace(',', '.');
     if (/^-?\d*\.?\d+([eE][+-]?\d+)?$/.test(cleaned)) {
       return { kind: 'number', raw: s, value: parseFloat(cleaned) };
@@ -110,7 +198,7 @@
 
   Sheet.prototype.invalidate = function () { this._cacheVal = {}; this._dirty = true; };
 
-  /* -------------------------------------------------------------- пересчёт */
+  /* ------------------------------------------------------- recalculation */
   Sheet.prototype.value = function (r, c) {
     var k = key(r, c);
     if (Object.prototype.hasOwnProperty.call(this._cacheVal, k)) return this._cacheVal[k];
@@ -120,7 +208,7 @@
       this._cacheVal[k] = cell.value === undefined ? null : cell.value;
       return this._cacheVal[k];
     }
-    if (this._stack[k]) return new XLF.XLError('#ЦИКЛ!');
+    if (this._stack[k]) return new XLF.XLError('#CIRCULAR!');
     this._stack[k] = true;
     var out;
     try {
@@ -128,12 +216,13 @@
       var self = this;
       out = XLF.single(XLF.evaluate(ast, {
         getCell: function (rr, cc) { return self.value(rr, cc); },
+        isHiddenRow: function (rr) { return !!self.hiddenRows[rr]; },
         names: this.names,
         cur: { row: r, col: c }
       }));
       if (out === undefined) out = null;
     } catch (e) {
-      out = new XLF.XLError(e instanceof SyntaxError ? '#СИНТАКСИС!' : '#VALUE!');
+      out = new XLF.XLError(e instanceof SyntaxError ? '#SYNTAX!' : '#VALUE!');
       out.message = e.message;
     }
     delete this._stack[k];
@@ -141,14 +230,14 @@
     return out;
   };
 
-  /* ---------------------------------------------------------- отображение */
+  /* ------------------------------------------------------------- display */
   function fmtNumber(v, fmt) {
     if (fmt) return XLF.formatNumber(v, fmt);
     if (Math.abs(v) >= 1e11 || (v !== 0 && Math.abs(v) < 1e-9)) return v.toExponential(4).replace('e', 'E');
     var r = Math.round(v * 1e9) / 1e9;
     var s = String(r);
     if (s.indexOf('.') >= 0 && s.split('.')[1].length > 6) s = r.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
-    return s.replace('.', ',');
+    return s;
   }
 
   Sheet.prototype.display = function (r, c) {
@@ -157,7 +246,7 @@
     var v = this.value(r, c);
     if (v === null || v === undefined) return '';
     if (XLF.isError(v)) return v.type;
-    if (typeof v === 'boolean') return v ? 'ИСТИНА' : 'ЛОЖЬ';
+    if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
     if (typeof v === 'number') {
       var f = cell.fmt;
       if (f && /[дгdy]/.test(f)) return XLF.formatDate(v, f);
@@ -174,9 +263,9 @@
     return 'left';
   };
 
-  /* ------------------------------------------------------------- утилиты */
+  /* ------------------------------------------------------------- helpers */
   Sheet.prototype.load = function (spec) {
-    // spec: { cells: {A1: значение|{v,fmt,style,locked}}, cols: {A:120}, rows: n, cols_n: n }
+    // spec: { cells: {A1: value | {v,fmt,style,locked}}, colWidths: {...}, rows: n }
     var self = this;
     if (spec.rows) this.rows = spec.rows;
     if (spec.colCount) this.cols = spec.colCount;
@@ -191,7 +280,7 @@
         self.set(rc.row, rc.col, d, { locked: true });
       }
     });
-    // форматы и стили, заданные диапазонами
+    // formats and styles given as ranges
     function eachIn(ref, fn) {
       var parts = String(ref).split(':');
       var A = XLF.a1ToRC(parts[0]), B = XLF.a1ToRC(parts[1] || parts[0]);
@@ -232,7 +321,7 @@
     return { rows: maxR + 1, cols: maxC + 1 };
   };
 
-  // Значение по адресу A1 (для проверок)
+  // Value at an A1 address (used by the marking code)
   Sheet.prototype.get = function (a1) {
     var rc = XLF.a1ToRC(a1);
     if (!rc) return null;

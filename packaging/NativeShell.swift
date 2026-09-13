@@ -1,7 +1,7 @@
-// Родное окно приложения на WKWebView.
-// Собирается только если на машине есть swiftc (Xcode Command Line Tools).
-// Меню намеренно минимальное: ⌘T, ⌘D, ⌘R, ⌘C, ⌘V должны доставаться странице,
-// а не перехватываться системными пунктами меню.
+// The native application window, built on WKWebView.
+// Compiled only when swiftc is present (Xcode Command Line Tools).
+// The menu is deliberately minimal: ⌘T, ⌘D, ⌘R, ⌘C and ⌘V must reach the page
+// rather than being swallowed by system menu items.
 import Cocoa
 import WebKit
 
@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window = NSWindow(contentRect: rect,
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
-        window.title = "Excel-тренажёр · подготовка к тесту"
+        window.title = "Excel Trainer - Yakov & Partners test preparation"
         window.contentView = web
         window.setFrameAutosaveName("ExcelTrainerWindow")
         window.minSize = NSSize(width: 1024, height: 640)
@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return true
     }
 
-    // JS-диалоги (confirm/alert) внутри страницы
+    // JavaScript dialogs (confirm/alert) raised by the page
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
                  initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
         let a = NSAlert()
@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let a = NSAlert()
         a.messageText = message
         a.addButton(withTitle: "OK")
-        a.addButton(withTitle: "Отмена")
+        a.addButton(withTitle: "Cancel")
         a.beginSheetModal(for: window) { r in completionHandler(r == .alertFirstButtonReturn) }
     }
 }
@@ -69,17 +69,17 @@ func buildMenu() {
     let appItem = NSMenuItem()
     main.addItem(appItem)
     let appMenu = NSMenu()
-    appMenu.addItem(withTitle: "О тренажёре", action: nil, keyEquivalent: "")
+    appMenu.addItem(withTitle: "About Excel Trainer", action: nil, keyEquivalent: "")
     appMenu.addItem(NSMenuItem.separator())
-    appMenu.addItem(withTitle: "Скрыть", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-    appMenu.addItem(withTitle: "Выйти", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    appMenu.addItem(withTitle: "Hide", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+    appMenu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     appItem.submenu = appMenu
 
     let winItem = NSMenuItem()
     main.addItem(winItem)
-    let winMenu = NSMenu(title: "Окно")
-    winMenu.addItem(withTitle: "Свернуть", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-    winMenu.addItem(withTitle: "Закрыть", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+    let winMenu = NSMenu(title: "Window")
+    winMenu.addItem(withTitle: "Minimise", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+    winMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
     winItem.submenu = winMenu
 
     NSApp.mainMenu = main

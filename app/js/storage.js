@@ -1,5 +1,6 @@
 /* =============================================================================
- * storage.js — прогресс ученика (localStorage с запасным вариантом в памяти)
+ * storage.js — the learner's progress (localStorage, memory as a fallback)
+ * Nothing here ever lowers a score: only the best attempt at a task is kept.
  * ========================================================================== */
 (function (root) {
   'use strict';
@@ -120,7 +121,7 @@
     exportJSON: function () { return JSON.stringify(this.data, null, 2); },
     importJSON: function (text) {
       var d = JSON.parse(text);
-      if (!d || d.version !== 1) throw new Error('Неподходящий формат файла');
+      if (!d || d.version !== 1) throw new Error('That file is not a progress export');
       this.data = Object.assign(blank(), d);
       this.flush();
     }

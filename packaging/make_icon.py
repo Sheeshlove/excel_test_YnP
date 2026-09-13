@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Рисует иконку приложения (PNG 1024×1024) без внешних зависимостей."""
+"""Draws the application icon (1024x1024 PNG) with no external dependencies."""
 import zlib, struct, math, sys, os
 
 S = 1024
-SS = 2                      # суперсэмплинг для сглаживания
+SS = 2                      # supersampling for smooth edges
 W = S * SS
 
 NAVY_TOP = (15, 37, 64)
@@ -27,7 +27,7 @@ def build():
     buf = bytearray(W * W * 4)
     pad = int(W * 0.055)
     r_out = int(W * 0.22)
-    # внутренний «лист»
+    # the inner sheet
     ix0, iy0 = int(W * 0.17), int(W * 0.20)
     ix1, iy1 = W - ix0, W - int(W * 0.17)
     r_in = int(W * 0.035)
@@ -55,12 +55,12 @@ def build():
                     cr, cg, cb = (232, 241, 255)
                 elif rw == 3 and col == 3:
                     cr, cg, cb = (250, 240, 214)
-                # линии сетки
+                # grid lines
                 fx = (x - ix0) % cw
                 fy = (y - iy0) % ch
                 if fx < lw or fy < lw:
                     cr, cg, cb = LINE
-                # акцентная рамка на «выделенной» ячейке
+                # accent outline on the selected cells
                 if rw == 2 and col == 1:
                     ex, ey = (x - ix0) - col * cw, (y - iy0) - rw * ch
                     if ex < lw * 2 or ey < lw * 2 or ex > cw - lw * 2 or ey > ch - lw * 2:
@@ -106,4 +106,4 @@ def write_png(path, data, size):
 if __name__ == '__main__':
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), 'icon.png')
     write_png(out, downsample(build()), S)
-    print('иконка записана:', out, os.path.getsize(out), 'байт')
+    print('icon written:', out, os.path.getsize(out), 'bytes')

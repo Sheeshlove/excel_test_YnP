@@ -1,6 +1,6 @@
 /* =============================================================================
- * grid.js — интерактивная таблица: навигация, ввод, протягивание, доллары
- * Поведение клавиш повторяет Excel для macOS.
+ * grid.js — the interactive sheet: navigation, editing, filling, dollars
+ * The keyboard behaves the way Excel for macOS behaves.
  * ========================================================================== */
 (function (root) {
   'use strict';
@@ -28,7 +28,7 @@
     this.build();
   }
 
-  /* ------------------------------------------------------------- отрисовка */
+  /* --------------------------------------------------------------- drawing */
   Grid.prototype.build = function () {
     var self = this;
     this.host.innerHTML = '';
@@ -43,6 +43,7 @@
       th.dataset.col = c;
       hr.appendChild(th);
     }
+    this.headRow = hr;
     thead.appendChild(hr);
     table.appendChild(thead);
 
@@ -87,6 +88,118 @@
     };
   };
 
+  // The filter buttons live in the header row of the attached table.
+  Grid.prototype.paintFilterButtons = function () {
+    var self = this, t = this.sheet.table;
+    var body = this.table.tBodies[0];
+    if (!t || !this.filtersOn) {
+      var old = this.table.querySelectorAll('.filter-btn');
+      Array.prototype.forEach.call(old, function (b) { b.remove(); });
+      return;
+    }
+    for (var c = t.c1; c <= t.c2; c++) {
+      var cell = body.rows[t.r1] && body.rows[t.r1].cells[c + 1];
+      if (!cell) continue;
+      if (cell.querySelector('.filter-btn')) continue;
+      var btn = el('button', 'filter-btn', '▾');
+      btn.dataset.col = c;
+      btn.title = 'Sort and filter this column';
+      cell.appendChild(btn);
+    }
+    Array.prototype.forEach.call(this.table.querySelectorAll('.filter-btn'), function (b) {
+      b.classList.toggle('active', !!self.sheet.filters[b.dataset.col]);
+      if (b.__wired) return;
+      b.__wired = true;
+      b.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        self.openFilterMenu(+b.dataset.col, b);
+      });
+    });
+  };
+
+  Grid.prototype.setFiltersOn = function (on) {
+    this.filtersOn = !!on;
+    if (!on) { this.sheet.clearFilters(); }
+    this.paint();
+  };
+
+  Grid.prototype.openFilterMenu = function (col, anchor) {
+    var self = this;
+    this.closeFilterMenu();
+    var values = this.sheet.columnValues(col);
+    var active = this.sheet.filters[col];
+    var chosen = active ? active.values.slice() : values.slice();
+    var menu = el('div', 'filter-menu');
+    menu.innerHTML =
+      '<button class="fm-item" data-act="asc">Sort A → Z  (smallest first)</button>' +
+      '<button class="fm-item" data-act="desc">Sort Z → A  (largest first)</button>' +
+      '<div class="fm-sep"></div>' +
+      '<div class="fm-list"></div>' +
+      '<div class="fm-actions">' +
+        '<button class="btn btn-primary fm-ok">Apply</button>' +
+        '<button class="btn fm-clear">Clear filter</button>' +
+      '</div>';
+    var list = menu.querySelector('.fm-list');
+    var allBox = el('label', 'fm-opt');
+    allBox.innerHTML = '<input type="checkbox" checked> <b>(Select all)</b>';
+    list.appendChild(allBox);
+    values.forEach(function (v) {
+      var lab = el('label', 'fm-opt');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = chosen.indexOf(v) >= 0;
+      cb.value = v;
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(' ' + (v === '' ? '(blank)' : v)));
+      list.appendChild(lab);
+    });
+    allBox.querySelector('input').addEventListener('change', function (e) {
+      Array.prototype.forEach.call(list.querySelectorAll('input'), function (cb) { cb.checked = e.target.checked; });
+    });
+    menu.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    menu.addEventListener('click', function (e) {
+      var act = e.target.closest('[data-act]');
+      if (act) {
+        self.sheet.sortBy(col, act.dataset.act === 'asc');
+        self.closeFilterMenu();
+        self.paint();
+        self.flash('Sorted by column ' + XLF.colToLetters(col));
+        return;
+      }
+      if (e.target.closest('.fm-ok')) {
+        var picked = [];
+        Array.prototype.forEach.call(list.querySelectorAll('input'), function (cb, i) {
+          if (i > 0 && cb.checked) picked.push(cb.value);
+        });
+        if (picked.length === values.length) self.sheet.setFilter(col, null);
+        else self.sheet.setFilter(col, picked);
+        self.closeFilterMenu();
+        self.paint();
+        self.flash(picked.length === values.length ? 'Filter cleared' : 'Filter applied: ' + picked.length + ' of ' + values.length + ' values');
+        return;
+      }
+      if (e.target.closest('.fm-clear')) {
+        self.sheet.setFilter(col, null);
+        self.closeFilterMenu();
+        self.paint();
+        self.flash('Filter cleared');
+      }
+    });
+    document.body.appendChild(menu);
+    var r = anchor.getBoundingClientRect();
+    menu.style.left = Math.min(r.left, window.innerWidth - 260) + 'px';
+    menu.style.top = (r.bottom + 4) + 'px';
+    this.filterMenu = menu;
+    this._closeOnClick = function () { self.closeFilterMenu(); };
+    setTimeout(function () { document.addEventListener('mousedown', self._closeOnClick); }, 0);
+  };
+
+  Grid.prototype.closeFilterMenu = function () {
+    if (this.filterMenu) { this.filterMenu.remove(); this.filterMenu = null; }
+    if (this._closeOnClick) { document.removeEventListener('mousedown', this._closeOnClick); this._closeOnClick = null; }
+  };
+
   Grid.prototype.paint = function () {
     var rng = this.range();
     for (var r = 0; r < this.rows; r++) {
@@ -114,7 +227,14 @@
         }
       }
     }
-    // подсветка заголовков
+    // rows hidden by the filter disappear from view but stay in the sheet
+    var bodyRows = this.table.tBodies[0].rows;
+    for (var hr2 = 0; hr2 < bodyRows.length; hr2++) {
+      bodyRows[hr2].classList.toggle('row-hidden', this.sheet.isHidden(hr2));
+    }
+    this.paintFilterButtons();
+
+    // header highlighting
     var ths = this.table.tHead.rows[0].cells;
     for (var i = 1; i < ths.length; i++) ths[i].className = (i - 1 >= rng.c1 && i - 1 <= rng.c2) ? 'hl' : '';
     var rws = this.table.tBodies[0].rows;
@@ -153,7 +273,7 @@
     };
   };
 
-  /* ------------------------------------------------------------ выделение */
+  /* ------------------------------------------------------------- selection */
   Grid.prototype.select = function (r, c, extend) {
     r = Math.max(0, Math.min(this.rows - 1, r));
     c = Math.max(0, Math.min(this.cols - 1, c));
@@ -175,7 +295,7 @@
     else if (tdLeft + td.offsetWidth > wrap.scrollLeft + wrap.clientWidth) wrap.scrollLeft = tdLeft + td.offsetWidth - wrap.clientWidth + 2;
   };
 
-  // Прыжок к краю данных — как ⌘+стрелка в Excel
+  // Jump to the edge of the data — ⌘+arrow in Excel
   Grid.prototype.jump = function (dr, dc, extend) {
     var r = this.sel.r, c = this.sel.c;
     var has = function (rr, cc) {
@@ -199,12 +319,12 @@
     this.select(nr, nc, extend);
   };
 
-  /* ----------------------------------------------------------- мышь */
+  /* ------------------------------------------------------------------ mouse */
   Grid.prototype.onMouseDown = function (e) {
     var td = e.target.closest('td');
     if (!td) return;
     var r = +td.dataset.r, c = +td.dataset.c;
-    // при вводе формулы клик по ячейке подставляет ссылку — как в Excel
+    // while typing a formula, clicking a cell inserts its address, as in Excel
     if (this.editing && this.acceptsRef()) {
       e.preventDefault();
       this.insertRef(r, c);
@@ -224,10 +344,10 @@
     this.paint();
   };
 
-  /* ------------------------------------------------------------ ввод */
+  /* ---------------------------------------------------------------- editing */
   Grid.prototype.startEdit = function (r, c, initial) {
     if (!this.canEdit(r, c)) {
-      this.flash('Эта ячейка — исходные данные, её менять нельзя');
+      this.flash('That cell holds source data and cannot be changed');
       return;
     }
     if (this.editing) this.commitEdit();
@@ -271,7 +391,7 @@
     this.onChange({ type: 'cancel' });
   };
 
-  // можно ли сейчас подставить ссылку кликом
+  // can a clicked address be inserted right now?
   Grid.prototype.acceptsRef = function () {
     if (!this.editing) return false;
     var v = this.editing.input.value;
@@ -290,7 +410,7 @@
     this.onChange({ type: 'editing', text: input.value });
   };
 
-  /* ---------------------------------------- переключение $ (⌘T в Excel Mac) */
+  /* ------------------------------------- cycling the $ signs (⌘T on Excel Mac) */
   function cycleAnchors(text, caret) {
     var re = /(\$?)([A-Za-z]{1,3})(\$?)([0-9]{1,7})/g, m;
     var best = null;
@@ -319,11 +439,15 @@
     this.onChange({ type: 'editing', text: input.value });
   };
 
-  /* ------------------------------------------------ клавиши в режиме ввода */
+  /* ------------------------------------------------- keys while editing a cell */
   Grid.prototype.onEditKey = function (e) {
     var k = e.key;
+    // Every key handled here must stop bubbling: otherwise the sheet-level
+    // handler sees the same Enter, finds editing already closed, and instantly
+    // reopens the editor one cell down.
     if (k === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
       this.commitEdit();
       this.host.focus();
       this.select(this.sel.r + (e.shiftKey ? -1 : 1), this.sel.c);
@@ -331,20 +455,21 @@
     }
     if (k === 'Tab') {
       e.preventDefault();
+      e.stopPropagation();
       this.commitEdit();
       this.host.focus();
       this.select(this.sel.r, this.sel.c + (e.shiftKey ? -1 : 1));
       return;
     }
-    if (k === 'Escape') { e.preventDefault(); this.cancelEdit(); this.host.focus(); return; }
+    if (k === 'Escape') { e.preventDefault(); e.stopPropagation(); this.cancelEdit(); this.host.focus(); return; }
     if ((k === 't' || k === 'T' || k === 'F4') && (e.metaKey || e.ctrlKey || k === 'F4')) {
-      e.preventDefault(); this.toggleAnchor(); return;
+      e.preventDefault(); e.stopPropagation(); this.toggleAnchor(); return;
     }
-    // стрелки внутри формулы не двигают курсор по листу — как в Excel при вводе
+    // arrows move inside the formula, not around the sheet, as in Excel
     e.stopPropagation();
   };
 
-  /* ------------------------------------------------------ клавиши на листе */
+  /* ------------------------------------------------------ keys on the sheet */
   Grid.prototype.onKeyDown = function (e) {
     if (this.editing) return;
     var k = e.key, mod = e.metaKey || e.ctrlKey, shift = e.shiftKey;
@@ -355,6 +480,13 @@
     if (mod && (k === 'v' || k === 'V')) { e.preventDefault(); this.paste(); return; }
     if (mod && (k === 'x' || k === 'X')) { e.preventDefault(); this.copy(); this.clearSelection(); return; }
     if (mod && (k === 'z' || k === 'Z')) { e.preventDefault(); this.undo(); return; }
+    if (mod && shift && (k === 'f' || k === 'F')) {
+      e.preventDefault();
+      if (!this.sheet.table) { this.flash('This task has no data table to filter'); return; }
+      this.setFiltersOn(!this.filtersOn);
+      this.flash(this.filtersOn ? 'Filter on — click the arrows in the header row' : 'Filter off');
+      return;
+    }
 
     switch (k) {
       case 'ArrowUp': e.preventDefault(); mod ? this.jump(-1, 0, shift) : this.select(this.sel.r - 1, this.sel.c, shift); return;
@@ -368,14 +500,14 @@
       case 'Delete': case 'Backspace': e.preventDefault(); this.clearSelection(); return;
       case 'Escape': this.anchor = { r: this.sel.r, c: this.sel.c }; this.paint(); return;
     }
-    // печатный символ — начинаем ввод
+    // a printable character starts editing
     if (!mod && !e.altKey && k.length === 1) {
       e.preventDefault();
       this.startEdit(this.sel.r, this.sel.c, k);
     }
   };
 
-  /* --------------------------------------------------------- операции */
+  /* ------------------------------------------------------------- operations */
   Grid.prototype.snapshot = function () {
     this.undoStack = this.undoStack || [];
     this.undoStack.push(JSON.stringify(this.sheet.toJSON()));
@@ -385,7 +517,7 @@
     if (!this.undoStack || !this.undoStack.length) return;
     var prev = JSON.parse(this.undoStack.pop());
     var self = this;
-    // сбрасываем только редактируемые ячейки
+    // only the editable cells are rolled back
     (this.opts.targets || []).forEach(function (a1) {
       var rc = XLF.a1ToRC(a1);
       self.sheet.set(rc.row, rc.col, prev[a1] || '', { locked: false });
@@ -402,15 +534,15 @@
       this.sheet.set(r, c, '', { locked: false });
       changed = true;
     }
-    if (!changed) this.flash('Здесь нечего очищать: это исходные данные');
+    if (!changed) this.flash('Nothing to clear here — this is source data');
     this.paint();
     this.onChange({ type: 'clear' });
   };
 
   Grid.prototype.fill = function (dir) {
     var rng = this.range();
-    if (dir === 'down' && rng.r1 === rng.r2) { this.flash('Выделите диапазон: верхняя ячейка — источник'); return; }
-    if (dir === 'right' && rng.c1 === rng.c2) { this.flash('Выделите диапазон: левая ячейка — источник'); return; }
+    if (dir === 'down' && rng.r1 === rng.r2) { this.flash('Select a range first — the top cell is the source'); return; }
+    if (dir === 'right' && rng.c1 === rng.c2) { this.flash('Select a range first — the left cell is the source'); return; }
     this.snapshot();
     var filled = 0;
     for (var r = rng.r1; r <= rng.r2; r++) {
@@ -430,7 +562,7 @@
     }
     this.paint();
     this.onChange({ type: 'fill', count: filled });
-    if (filled) this.flash('Заполнено ячеек: ' + filled);
+    if (filled) this.flash(filled + ' cell' + (filled === 1 ? '' : 's') + ' filled');
   };
 
   Grid.prototype.copy = function () {
@@ -441,11 +573,11 @@
       data.push(row);
     }
     this.clipboard = { data: data, r: rng.r1, c: rng.c1 };
-    this.flash('Скопировано: ' + (rng.r2 - rng.r1 + 1) + '×' + (rng.c2 - rng.c1 + 1));
+    this.flash('Copied ' + (rng.r2 - rng.r1 + 1) + '×' + (rng.c2 - rng.c1 + 1));
   };
 
   Grid.prototype.paste = function () {
-    if (!this.clipboard) { this.flash('Буфер пуст — сначала ⌘C'); return; }
+    if (!this.clipboard) { this.flash('Nothing copied yet — press ⌘C first'); return; }
     this.snapshot();
     var cb = this.clipboard, base = this.sel, pasted = 0;
     for (var i = 0; i < cb.data.length; i++) {

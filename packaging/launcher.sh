@@ -1,5 +1,5 @@
 #!/bin/bash
-# Запуск Excel-тренажёра. Лежит внутри ExcelTrainer.app/Contents/MacOS/.
+# Launches Excel Trainer. Lives inside ExcelTrainer.app/Contents/MacOS/.
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -8,9 +8,9 @@ APPDIR="$RES/app"
 PROFILE="$HOME/Library/Application Support/ExcelTrainer"
 mkdir -p "$PROFILE"
 
-alert() { osascript -e "display alert \"Excel-тренажёр\" message \"$1\"" >/dev/null 2>&1; }
+alert() { osascript -e "display alert \"Excel Trainer\" message \"$1\"" >/dev/null 2>&1; }
 
-# --- 1. Локальный сервер (нужен, чтобы сохранялся прогресс) -----------------
+# --- 1. Local server, so the browser will let the page save progress --------
 PY=""
 for cand in /usr/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3; do
   [ -x "$cand" ] && PY="$cand" && break
@@ -41,13 +41,13 @@ else
   URL="file://$APPDIR/index.html"
 fi
 
-# --- 2. Родное окно, если оно собрано --------------------------------------
+# --- 2. Native window, if it was built --------------------------------------
 if [ -x "$RES/NativeShell" ]; then
   "$RES/NativeShell" "$URL"
   exit 0
 fi
 
-# --- 3. Окно браузера без вкладок и адресной строки ------------------------
+# --- 3. A browser window with no tabs and no address bar --------------------
 for NAME in "Google Chrome" "Microsoft Edge" "Brave Browser" "Chromium" "Yandex"; do
   BIN="/Applications/$NAME.app/Contents/MacOS/$NAME"
   if [ -x "$BIN" ]; then
@@ -58,11 +58,11 @@ for NAME in "Google Chrome" "Microsoft Edge" "Brave Browser" "Chromium" "Yandex"
   fi
 done
 
-# --- 4. Запасной путь: браузер по умолчанию --------------------------------
+# --- 4. Fallback: the default browser ---------------------------------------
 open "$URL"
 if [ -z "$PORT" ]; then
-  MSG="Тренажёр открыт в браузере по умолчанию.\n\nPython 3 не найден, поэтому страница открыта как файл. В Safari прогресс в этом режиме не сохраняется — используйте Chrome или установите Xcode Command Line Tools (xcode-select --install).\n\nНе закрывайте это окно, пока занимаетесь."
+  MSG="Excel Trainer has opened in your default browser.\n\nPython 3 was not found, so the page was opened as a file. Safari does not save progress in that mode - use Chrome, or install the Xcode Command Line Tools (xcode-select --install).\n\nLeave this window open while you work."
 else
-  MSG="Тренажёр открыт в браузере по умолчанию.\n\nНе закрывайте это окно, пока занимаетесь: оно держит локальный сервер."
+  MSG="Excel Trainer has opened in your default browser.\n\nLeave this window open while you work - it is holding the local server."
 fi
-osascript -e "display dialog \"$MSG\" buttons {\"Завершить\"} default button 1 with title \"Excel-тренажёр\"" >/dev/null 2>&1
+osascript -e "display dialog \"$MSG\" buttons {\"Quit\"} default button 1 with title \"Excel Trainer\"" >/dev/null 2>&1

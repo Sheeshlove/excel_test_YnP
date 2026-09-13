@@ -1,14 +1,14 @@
 /* =============================================================================
- * formula.js — движок формул Excel (токенайзер, парсер, интерпретатор)
- * Без зависимостей. Работает и в браузере (window.XLF), и в Node (module.exports).
+ * formula.js — the Excel formula engine (tokenizer, parser, interpreter)
+ * No dependencies. Runs in the browser (window.XLF) and in Node (module.exports).
  *
- * Поддерживает:
- *   - ссылки A1, $A$1, диапазоны A1:B10
- *   - операторы + - * / ^ % & = <> < > <= >=  (приоритеты как в Excel)
- *   - разделители аргументов , и ;  (русская и английская локаль)
- *   - русские имена функций (СУММ, ЕСЛИ, ВПР, ...)
- *   - ~110 функций: математика, логика, условные агрегаты, поиск, текст,
- *     даты, финансы, информационные
+ * Supports:
+ *   - references A1, $A$1 and ranges A1:B10
+ *   - operators + - * / ^ % & = <> < > <= >=  with Excel's precedence
+ *   - both , and ; as argument separators (English and Russian locales)
+ *   - Russian function names (СУММ, ЕСЛИ, ВПР, …) as aliases
+ *   - ~130 functions: maths, logic, conditional aggregates, lookup, text,
+ *     dates, finance, information
  * ========================================================================== */
 (function (root, factory) {
   var mod = factory();
@@ -32,7 +32,7 @@
     num: function () { return new XLError('#NUM!'); },
     na: function () { return new XLError('#N/A'); },
     nul: function () { return new XLError('#NULL!'); },
-    cycle: function () { var e = new XLError('#ЦИКЛ!'); return e; }
+    cycle: function () { var e = new XLError('#CIRCULAR!'); return e; }
   };
   function isErr(v) { return v instanceof XLError; }
 
@@ -276,7 +276,7 @@
   function toStr(v) {
     if (isErr(v)) return v;
     if (v === null || v === undefined) return '';
-    if (typeof v === 'boolean') return v ? 'ИСТИНА' : 'ЛОЖЬ';
+    if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
     if (typeof v === 'number') return numToStr(v);
     if (Array.isArray(v)) return toStr(flat(v)[0]);
     return String(v);
@@ -581,7 +581,7 @@
     'ДЕНЬНЕД': 'WEEKDAY', 'ДНИ': 'DAYS', 'ЧИСТРАБДНИ': 'NETWORKDAYS',
     'ЧПС': 'NPV', 'ВСД': 'IRR', 'ЧИСТНЗ': 'XNPV', 'ЧИСТВНДОХ': 'XIRR', 'ПЛТ': 'PMT',
     'ПС': 'PV', 'БС': 'FV', 'КПЕР': 'NPER', 'СТАВКА': 'RATE',
-    'ЕЧИСЛО': 'ISNUMBER', 'ЕТЕКСТ': 'ISTEXT', 'ЕПУСТО': 'ISBLANK', 'ЕОШИБКА': 'ISERROR',
+    'ПРОМЕЖУТОЧНЫЕ.ИТОГИ': 'SUBTOTAL', 'ЕЧИСЛО': 'ISNUMBER', 'ЕТЕКСТ': 'ISTEXT', 'ЕПУСТО': 'ISBLANK', 'ЕОШИБКА': 'ISERROR',
     'ЕНД': 'ISNA', 'НД': 'NA', 'Ч': 'N'
   };
   function normFn(name) {
@@ -1230,8 +1230,8 @@
     var neg = n < 0;
     var s = Math.abs(n).toFixed(dec);
     var parts = s.split('.');
-    if (thou) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-    s = parts.join(',');
+    if (thou) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    s = parts.join('.');
     return (neg ? '-' : '') + s + (pct ? '%' : '');
   }
   function formatDate(serial, f) {
@@ -1416,6 +1416,38 @@
     }
     return Math.abs(g(r)) < 1e-6 ? r : ERR.num();
   });
+
+  /* --- SUBTOTAL: counts visible rows only --- */
+  // SUBTOTAL(function_num, range…). Rows hidden by the autofilter drop out of
+  // the calculation — that is the entire point of the function.
+  var SUBTOTAL_OPS = {
+    1: 'AVERAGE', 2: 'COUNT', 3: 'COUNTA', 4: 'MAX', 5: 'MIN', 6: 'PRODUCT',
+    7: 'STDEV.S', 8: 'STDEV.P', 9: 'SUM', 10: 'VAR.S', 11: 'VAR.P'
+  };
+  def('SUBTOTAL', function (nodes, ctx) {
+    if (nodes.length < 2) return ERR.value();
+    var code = toNum(single(evaluate(nodes[0], ctx)));
+    if (isErr(code)) return code;
+    var op = SUBTOTAL_OPS[code > 100 ? code - 100 : code];
+    if (!op) return ERR.value();
+    var visible = [];
+    for (var i = 1; i < nodes.length; i++) {
+      var ref = nodeToRef(nodes[i]);
+      if (ref) {
+        for (var r = ref.r1; r <= ref.r2; r++) {
+          if (ctx.isHiddenRow && ctx.isHiddenRow(r)) continue;
+          var row = [];
+          for (var c = ref.c1; c <= ref.c2; c++) row.push(ctx.getCell(r, c));
+          visible.push(row);
+        }
+      } else {
+        var v = evaluate(nodes[i], ctx);
+        if (isErr(v)) return v;
+        visible.push(Array.isArray(v) ? flat(v) : [v]);
+      }
+    }
+    return FUNCS[op].apply(null, [visible]);
+  }, { lazy: true });
 
   /* --- информационные --- */
   def('ISNUMBER', function (v) { return typeof single(v) === 'number'; }, { passErrors: true });

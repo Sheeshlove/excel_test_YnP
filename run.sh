@@ -1,12 +1,12 @@
 #!/bin/bash
-# Быстрый запуск без сборки .app — для разработки и для тех, кто не хочет бандл.
+# Quick start without building the .app bundle.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 PY="$(command -v python3 || true)"
 if [ -z "$PY" ]; then
-  echo "Нужен Python 3. Установите Xcode Command Line Tools: xcode-select --install"
-  echo "Как запасной вариант откройте app/index.html в Chrome."
+  echo "Python 3 is required. Install the Xcode Command Line Tools: xcode-select --install"
+  echo "As a fallback, open app/index.html in Google Chrome."
   exit 1
 fi
 
@@ -21,11 +21,11 @@ for _ in $(seq 1 20); do
   [ -n "$PORT" ] && break
   sleep 0.1
 done
-[ -z "$PORT" ] && { echo "Не удалось запустить сервер"; exit 1; }
+[ -z "$PORT" ] && { echo "Could not start the local server"; exit 1; }
 
 URL="http://127.0.0.1:$PORT/index.html"
-echo "Excel-тренажёр запущен: $URL"
-echo "Остановить — Ctrl+C."
+echo "Excel Trainer is running at $URL"
+echo "Press Ctrl+C to stop."
 
 if [ "$(uname)" = "Darwin" ]; then
   for NAME in "Google Chrome" "Microsoft Edge" "Brave Browser" "Chromium"; do

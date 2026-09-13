@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Локальный HTTP-сервер тренажёра.
+"""Local HTTP server for the trainer.
 
-Слушает только 127.0.0.1 на свободном порту, печатает номер порта первой
-строкой и обслуживает каталог приложения. Нужен для того, чтобы браузер
-считал страницу полноценным сайтом и разрешил сохранять прогресс.
+Binds to 127.0.0.1 on a free port, prints the port number on the first line and
+serves the application directory. It exists so the browser treats the page as a
+proper site and allows it to save progress.
 """
 import http.server
 import os

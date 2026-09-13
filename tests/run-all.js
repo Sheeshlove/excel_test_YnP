@@ -1,11 +1,11 @@
-/* Прогон всех проверок: движок формул, программа, интерфейс. */
+/* Runs every check: the formula engine, the programme, the interface. */
 const { execFileSync } = require('child_process');
 const path = require('path');
 
 const suites = [
-  ['Движок формул', 'formula.test.js'],
-  ['Учебная программа', 'curriculum.test.js'],
-  ['Интерфейс (браузер)', 'ui.test.js']
+  ['Formula engine', 'formula.test.js'],
+  ['Training programme', 'curriculum.test.js'],
+  ['Interface (real browser)', 'ui.test.js']
 ];
 
 let failed = 0;
@@ -17,8 +17,8 @@ for (const [name, file] of suites) {
   } catch (e) {
     failed++;
     process.stdout.write((e.stdout || '') + (e.stderr || ''));
-    console.log('НЕ ПРОЙДЕНО: ' + name);
+    console.log('FAILED: ' + name);
   }
 }
-console.log('\n' + (failed ? failed + ' набор(а) проверок не прошли' : 'Все проверки пройдены.'));
+console.log('\n' + (failed ? failed + ' suite(s) failed' : 'All checks passed.'));
 process.exit(failed ? 1 : 0);

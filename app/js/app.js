@@ -1,16 +1,21 @@
 /* =============================================================================
- * app.js — навигация, экраны, логика прогресса
+ * app.js — screens, navigation and progress
  * ========================================================================== */
 (function (root) {
   'use strict';
   var XLF = root.XLF, ENG = root.XLEngine, G = root.XLGrader,
-      CUR = root.XLCurriculum, DRILLS = root.XLDrills, Store = root.XLStore;
+      CUR = root.XLCurriculum, DRILLS = root.XLDrills, Store = root.XLStore,
+      PV = root.XLPivot, XP = root.XLExplain;
 
   var view = document.getElementById('view');
-  var state = { grid: null, task: null, level: null, exam: null, timerId: null };
+  var state = {
+    grid: null, pivot: null, task: null, level: null, exam: null, timerId: null,
+    // work in progress is kept for the whole session, so clicking away from a
+    // half-finished task and coming back does not throw the work away
+    sheets: {}, pivots: {}
+  };
 
-  /* -------------------------------------------------------------- утилиты */
-  // <template> нужен, чтобы корректно разбирались фрагменты таблиц (<thead>, <tr>)
+  /* -------------------------------------------------------------- helpers */
   function h(html) {
     var t = document.createElement('template');
     t.innerHTML = html.trim();
@@ -25,7 +30,7 @@
     if (n === null || n === undefined) return '—';
     if (typeof n !== 'number') return String(n);
     var r = Math.round(n * 100) / 100;
-    return r.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+    return r.toLocaleString('en-US', { maximumFractionDigits: 2 });
   }
   function mmss(sec) {
     sec = Math.max(0, Math.round(sec));
@@ -38,6 +43,7 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
   }
+  function plural(n, one, many) { return n === 1 ? one : many; }
 
   function levelById(id) {
     for (var i = 0; i < CUR.levels.length; i++) if (String(CUR.levels[i].id) === String(id)) return CUR.levels[i];
@@ -47,7 +53,6 @@
     for (var i = 0; i < level.tasks.length; i++) if (level.tasks[i].id === id) return level.tasks[i];
     return null;
   }
-
   function levelStats(level) {
     var max = 0, got = 0, done = 0;
     level.tasks.forEach(function (t) {
@@ -57,23 +62,22 @@
     });
     return { max: max, got: got, done: done, total: level.tasks.length, share: max ? got / max : 0 };
   }
+  var UNLOCK = 0.6;
   function levelUnlocked(level) {
     var idx = CUR.levels.indexOf(level);
     if (idx <= 0) return true;
     if (level.exam) {
-      return CUR.levels.slice(0, idx).every(function (l) { return levelStats(l).share >= 0.6; });
+      return CUR.levels.slice(0, idx).every(function (l) { return levelStats(l).share >= UNLOCK; });
     }
-    return levelStats(CUR.levels[idx - 1]).share >= 0.6;
+    return levelStats(CUR.levels[idx - 1]).share >= UNLOCK;
   }
-
   function updateHeader() {
     var d = Store.data.streak.days;
     document.getElementById('xp-value').textContent = Store.data.xp;
-    document.getElementById('streak-value').textContent =
-      d + ' ' + plural(d, 'день', 'дня', 'дней') + ' подряд';
+    document.getElementById('streak-value').textContent = d + ' ' + plural(d, 'day', 'days') + ' in a row';
   }
 
-  /* ============================================================ ГЛАВНАЯ === */
+  /* ============================================================== HOME === */
   function renderHome() {
     var totalMax = 0, totalGot = 0;
     CUR.levels.forEach(function (l) { var s = levelStats(l); totalMax += s.max; totalGot += s.got; });
@@ -92,32 +96,41 @@
     page.appendChild(h(
       '<div class="hero">' +
         '<div class="hero-main">' +
-          '<h1>Программа подготовки к Excel-тесту</h1>' +
-          '<p>Десять уровней от адреса ячейки до консалтингового кейса. Каждая задача решается ' +
-          'в настоящей таблице и проверяется по значению — как на реальном отборе.</p>' +
+          '<h1>Excel training for the Yakov &amp; Partners test</h1>' +
+          '<p>Twelve levels from the address of a cell to a pivot table and a consulting case. ' +
+          'Every task is solved in a real spreadsheet and marked on the value it produces, exactly like the real test.</p>' +
           '<div class="progressbar"><i style="width:' + pct + '%"></i></div>' +
-          '<p style="margin-top:8px;font-size:12.5px">Пройдено ' + pct + '% программы · ' + totalGot + ' из ' + totalMax + ' баллов</p>' +
+          '<p style="margin-top:8px;font-size:12.5px">' + pct + '% of the programme · ' + totalGot + ' of ' + totalMax + ' points</p>' +
         '</div>' +
         '<div class="hero-actions">' +
-          (next ? '<button class="btn btn-lg" data-go="' + next.level.id + '/' + next.task.id + '">Продолжить</button>' : '') +
-          '<button class="btn btn-ghost btn-lg" data-nav="dojo">Додзё клавиш</button>' +
+          (next ? '<button class="btn btn-lg" data-go="' + next.level.id + '/' + next.task.id + '">Continue</button>' : '') +
+          '<button class="btn btn-ghost btn-lg" data-nav="dojo">Shortcut dojo</button>' +
         '</div>' +
       '</div>'
     ));
 
+    page.appendChild(h(
+      '<div class="card notice">' +
+        '<b>Nothing here can be lost.</b> A wrong answer costs no points and can be retried as often as you like — ' +
+        'only your best attempt is ever recorded. A level opens once the previous one reaches ' +
+        Math.round(UNLOCK * 100) + '% of its points, so a task you cannot crack today will never block you: ' +
+        'move on and come back to it.' +
+      '</div>'));
+
     var review = reviewQueue();
     if (review.length) {
       var rc = h('<div class="card" style="padding:16px 18px;margin-bottom:20px"></div>');
-      rc.appendChild(h('<div style="font-weight:600;margin-bottom:4px">На повторение — ' + review.length + ' ' + plural(review.length, 'задача', 'задачи', 'задач') + '</div>'));
-      rc.appendChild(h('<div style="color:var(--muted);font-size:12.5px;margin-bottom:12px">Здесь задачи, которые вы решили с подсказкой, с ошибками или подсмотрели ответ. Пройдите их снова без помощи.</div>'));
+      rc.appendChild(h('<div style="font-weight:600;margin-bottom:4px">' + review.length + ' ' +
+        plural(review.length, 'task', 'tasks') + ' worth revisiting</div>'));
+      rc.appendChild(h('<div style="color:var(--muted);font-size:12.5px;margin-bottom:12px">Tasks you solved with a hint, ' +
+        'solved partially, or looked the answer up. Try them again unaided — your score can only go up.</div>'));
       var list = h('<div class="review-list"></div>');
       review.slice(0, 4).forEach(function (r) {
-        var row = h('<div class="card task-row" data-go="' + r.level.id + '/' + r.task.id + '">' +
+        list.appendChild(h('<div class="card task-row" data-go="' + r.level.id + '/' + r.task.id + '">' +
           '<div class="task-status partial">↻</div>' +
           '<div class="task-row-main"><div class="task-row-title">' + esc(r.task.title) + '</div>' +
-          '<div class="task-row-brief">Уровень ' + r.level.id + ' · ' + esc(r.reason) + '</div></div>' +
-          '<div class="task-row-points">' + Store.earnedFor(r.task) + '/' + r.task.points + '</div></div>');
-        list.appendChild(row);
+          '<div class="task-row-brief">Level ' + r.level.id + ' · ' + esc(r.reason) + '</div></div>' +
+          '<div class="task-row-points">' + Store.earnedFor(r.task) + '/' + r.task.points + '</div></div>'));
       });
       rc.appendChild(list);
       page.appendChild(rc);
@@ -127,11 +140,11 @@
     CUR.levels.forEach(function (lv) {
       var st = levelStats(lv), unlocked = levelUnlocked(lv);
       var cls = 'card level-card' + (unlocked ? '' : ' locked') + (st.share >= 0.999 ? ' done' : '') + (lv.exam ? ' exam' : '');
-      var badge = !unlocked ? '<span class="badge">закрыт</span>'
-        : st.done === st.total ? '<span class="badge ok">пройден</span>'
-        : st.done ? '<span class="badge warn">' + st.done + ' из ' + st.total + '</span>'
-        : (lv.exam ? '<span class="badge gold">экзамен</span>' : '<span class="badge">не начат</span>');
-      var card = h(
+      var badge = !unlocked ? '<span class="badge">locked</span>'
+        : st.done === st.total ? '<span class="badge ok">complete</span>'
+        : st.done ? '<span class="badge warn">' + st.done + ' of ' + st.total + '</span>'
+        : (lv.exam ? '<span class="badge gold">mock test</span>' : '<span class="badge">not started</span>');
+      grid.appendChild(h(
         '<div class="' + cls + '" ' + (unlocked ? 'data-level="' + lv.id + '"' : '') + '>' +
           '<div class="level-top">' +
             '<div class="level-num">' + (lv.exam ? '★' : lv.id) + '</div>' +
@@ -139,24 +152,17 @@
             '<div class="level-sub">' + esc(lv.subtitle) + '</div></div>' +
           '</div>' +
           '<div class="progressbar"><i style="width:' + Math.round(st.share * 100) + '%"></i></div>' +
-          '<div class="level-meta"><span>' + st.got + ' / ' + st.max + ' баллов</span>' + badge + '</div>' +
-        '</div>');
-      grid.appendChild(card);
+          '<div class="level-meta"><span>' + st.got + ' / ' + st.max + ' points</span>' + badge + '</div>' +
+        '</div>'));
     });
     page.appendChild(grid);
 
     if (!Store.persistent) {
       page.appendChild(h('<div class="card" style="padding:12px 16px;margin-top:18px;font-size:12.5px;color:var(--muted)">' +
-        'Браузер не разрешает сохранение прогресса на этой странице. Запустите приложение через ExcelTrainer.app или скрипт run.sh — тогда результаты сохранятся.</div>'));
+        'This browser will not let the page save anything, so progress will be lost when you close it. ' +
+        'Launch the app through ExcelTrainer.app or run.sh and it will be kept.</div>'));
     }
     show(page);
-  }
-
-  function plural(n, one, few, many) {
-    var m10 = n % 10, m100 = n % 100;
-    if (m10 === 1 && m100 !== 11) return one;
-    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
-    return many;
   }
 
   function reviewQueue() {
@@ -166,25 +172,28 @@
       lv.tasks.forEach(function (t) {
         var s = Store.task(t.id);
         if (!s.attempts) return;
-        if (s.seenSolution) out.push({ level: lv, task: t, reason: 'смотрели решение' });
-        else if (s.hinted && s.best >= 1) out.push({ level: lv, task: t, reason: 'решено с подсказкой' });
-        else if (s.best < 1) out.push({ level: lv, task: t, reason: 'решено не полностью' });
+        if (s.seenSolution) out.push({ level: lv, task: t, reason: 'you looked at the answer' });
+        else if (s.hinted && s.best >= 1) out.push({ level: lv, task: t, reason: 'solved with a hint' });
+        else if (s.best < 1) out.push({ level: lv, task: t, reason: 'not fully solved yet' });
       });
     });
     return out;
   }
 
-  /* ============================================================= УРОВЕНЬ == */
+  /* ============================================================= LEVEL === */
   function renderLevel(id) {
     var lv = levelById(id);
     if (!lv) return renderHome();
-    if (!levelUnlocked(lv)) { toast('Уровень пока закрыт: наберите 60% баллов на предыдущем'); return renderHome(); }
+    if (!levelUnlocked(lv)) {
+      toast('This level opens once the previous one reaches ' + Math.round(UNLOCK * 100) + '% of its points');
+      return renderHome();
+    }
     var st = levelStats(lv);
 
     var page = h('<div class="page"></div>');
     page.appendChild(h(
       '<div class="page-head">' +
-        '<div class="crumbs"><button data-nav="home">Программа</button> › Уровень ' + lv.id + '</div>' +
+        '<div class="crumbs"><button data-nav="home">Programme</button> › Level ' + lv.id + '</div>' +
         '<h1>' + esc(lv.title) + '</h1>' +
         '<p>' + esc(lv.goal) + '</p>' +
       '</div>'));
@@ -195,12 +204,13 @@
     if (lv.exam) {
       left.appendChild(h(
         '<div class="card" style="padding:18px 20px;margin-bottom:16px">' +
-          '<div style="font-weight:600;margin-bottom:6px">Экзамен: ' + lv.tasks.length + ' задач, ' +
-          Math.round(lv.timeLimitSec / 60) + ' минут, без подсказок</div>' +
-          '<div style="color:var(--muted);font-size:13px;margin-bottom:14px">Проходной результат — ' +
-          Math.round(lv.passScore * 100) + '%. Между задачами можно переключаться, ответы сохраняются. ' +
-          'Проверка — в конце, как на реальном тесте.</div>' +
-          '<button class="btn btn-primary" id="start-exam">Начать экзамен</button>' +
+          '<div style="font-weight:600;margin-bottom:6px">Mock test: ' + lv.tasks.length + ' questions, ' +
+          Math.round(lv.timeLimitSec / 60) + ' minutes, no hints</div>' +
+          '<div style="color:var(--muted);font-size:13px;margin-bottom:14px">Pass mark ' +
+          Math.round(lv.passScore * 100) + '%. You can move between questions freely and your answers are kept; ' +
+          'marking happens at the end, like the real thing. Sit it as many times as you want — a poor run never ' +
+          'reduces the points you already have.</div>' +
+          '<button class="btn btn-primary" id="start-exam">Start the mock test</button>' +
         '</div>'));
     }
 
@@ -209,11 +219,13 @@
       var s = Store.task(t.id), earned = Store.earnedFor(t);
       var cls = s.best >= 1 ? 'done' : (s.attempts ? 'partial' : '');
       var mark = s.best >= 1 ? '✓' : (s.attempts ? '·' : '');
+      var kind = t.mode === 'pivot' ? '<span class="tag">pivot</span>'
+        : (t.expect && (t.expect.sortedBy || t.expect.filtered)) ? '<span class="tag">sort / filter</span>' : '';
       list.appendChild(h(
         '<div class="card task-row" data-go="' + lv.id + '/' + t.id + '">' +
           '<div class="task-status ' + cls + '">' + mark + '</div>' +
           '<div class="task-row-main">' +
-            '<div class="task-row-title">' + esc(t.title) + '</div>' +
+            '<div class="task-row-title">' + esc(t.title) + ' ' + kind + '</div>' +
             '<div class="task-row-brief">' + esc(t.brief) + '</div>' +
           '</div>' +
           '<div class="task-row-points">' + earned + ' / ' + t.points + '</div>' +
@@ -222,12 +234,13 @@
     left.appendChild(list);
     layout.appendChild(left);
 
-    var theory = h('<div class="card theory"><h3>Что нужно знать</h3></div>');
+    var theory = h('<div class="card theory"><h3>What you need to know</h3></div>');
     (lv.theory || []).forEach(function (t) {
       theory.appendChild(h('<div class="theory-item"><b>' + esc(t.h) + '</b><span>' + esc(t.p) + '</span></div>'));
     });
     theory.appendChild(h('<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)">' +
-      'Прогресс уровня: ' + st.got + ' из ' + st.max + ' баллов</div>'));
+      'Level progress: ' + st.got + ' of ' + st.max + ' points. ' +
+      Math.round(UNLOCK * 100) + '% opens the next level.</div>'));
     layout.appendChild(theory);
     page.appendChild(layout);
     show(page);
@@ -236,58 +249,56 @@
     if (se) se.addEventListener('click', function () { startExam(lv); });
   }
 
-  /* ============================================================== ЗАДАЧА == */
+  /* ============================================================== TASK === */
   function renderTask(levelId, taskId) {
     var lv = levelById(levelId);
     if (!lv) return renderHome();
     var task = taskById(lv, taskId);
     if (!task) return renderLevel(levelId);
     var examMode = !!(state.exam && state.exam.level.id === lv.id);
-    // вне экзаменационной сессии задачи экзамена открываются в обычном режиме —
-    // чтобы после пробника можно было разобрать ошибки
 
     state.level = lv; state.task = task;
     var targets = G.targetCells(task);
+    var isPivot = task.mode === 'pivot';
     var sheet;
-    if (examMode && state.exam.sheets[task.id]) sheet = state.exam.sheets[task.id];
-    else {
-      sheet = G.buildSheet(task);
-      if (examMode) state.exam.sheets[task.id] = sheet;
+    if (examMode) {
+      sheet = state.exam.sheets[task.id] || (state.exam.sheets[task.id] = G.buildSheet(task));
+    } else {
+      sheet = state.sheets[task.id] || (state.sheets[task.id] = G.buildSheet(task));
     }
 
     var idx = lv.tasks.indexOf(task);
     var wrap = h('<div class="workspace"></div>');
     var panel = h('<aside class="task-panel"></aside>');
-    panel.appendChild(h('<div class="crumbs"><button data-nav="home">Программа</button> › ' +
-      '<button data-level="' + lv.id + '">Уровень ' + lv.id + '</button> › Задача ' + (idx + 1) + ' из ' + lv.tasks.length + '</div>'));
+    panel.appendChild(h('<div class="crumbs"><button data-nav="home">Programme</button> › ' +
+      '<button data-level="' + lv.id + '">Level ' + lv.id + '</button> › Question ' + (idx + 1) + ' of ' + lv.tasks.length + '</div>'));
     panel.appendChild(h('<h2>' + esc(task.title) + '</h2>'));
     panel.appendChild(h('<div class="brief">' + esc(task.brief) + '</div>'));
 
-    if (examMode) {
-      panel.appendChild(h('<div class="timer" id="exam-timer">—</div>'));
-    }
+    if (examMode) panel.appendChild(h('<div class="timer" id="exam-timer">—</div>'));
 
     var hintSlot = h('<div></div>');
     var already = Store.task(task.id);
     if (!examMode && already.hinted) {
-      hintSlot.appendChild(h('<div class="hintbox"><b>Подсказка</b>' + esc(task.hint) + '</div>'));
+      hintSlot.appendChild(h('<div class="hintbox"><b>Hint</b>' + esc(task.hint) + '</div>'));
     }
     if (!examMode && already.best >= 1) {
-      panel.appendChild(h('<div style="font-size:12.5px;color:var(--ok)">Задача уже решена — ' +
-        Store.earnedFor(task) + ' из ' + task.points + ' баллов. Можно перерешать без подсказок.</div>'));
+      panel.appendChild(h('<div class="solved-note">Already solved — ' + Store.earnedFor(task) + ' of ' +
+        task.points + ' points. Redo it unaided to raise the score; it can never go down.</div>'));
     }
     panel.appendChild(hintSlot);
 
     var actions = h('<div class="panel-actions"></div>');
     if (!examMode) {
-      actions.appendChild(h('<button class="btn btn-primary" id="btn-check">Проверить</button>'));
-      actions.appendChild(h('<button class="btn" id="btn-hint">Подсказка</button>'));
-      actions.appendChild(h('<button class="btn btn-ghost" id="btn-reset">Сбросить</button>'));
-      actions.appendChild(h('<button class="btn btn-ghost" id="btn-solution">Решение</button>'));
+      actions.appendChild(h('<button class="btn btn-primary" id="btn-check">Check my answer</button>'));
+      actions.appendChild(h('<button class="btn" id="btn-hint">Hint</button>'));
+      actions.appendChild(h('<button class="btn" id="btn-explain">Explain</button>'));
+      actions.appendChild(h('<button class="btn btn-ghost" id="btn-reset">Clear my work</button>'));
+      actions.appendChild(h('<button class="btn btn-ghost" id="btn-solution">Show the answer</button>'));
     } else {
-      if (idx > 0) actions.appendChild(h('<button class="btn" id="btn-prev">← Назад</button>'));
-      if (idx < lv.tasks.length - 1) actions.appendChild(h('<button class="btn btn-primary" id="btn-next">Дальше →</button>'));
-      actions.appendChild(h('<button class="btn btn-ghost" id="btn-finish">Завершить экзамен</button>'));
+      if (idx > 0) actions.appendChild(h('<button class="btn" id="btn-prev">← Back</button>'));
+      if (idx < lv.tasks.length - 1) actions.appendChild(h('<button class="btn btn-primary" id="btn-next">Next →</button>'));
+      actions.appendChild(h('<button class="btn btn-ghost" id="btn-finish">Finish the test</button>'));
     }
     panel.appendChild(actions);
 
@@ -295,25 +306,36 @@
     panel.appendChild(resultSlot);
 
     if (examMode) {
-      var nav = h('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:14px;border-top:1px solid var(--line)"></div>');
+      var nav = h('<div class="exam-nav"></div>');
       lv.tasks.forEach(function (t, i) {
-        var filled = state.exam.sheets[t.id] && G.targetCells(t).some(function (a1) { return state.exam.sheets[t.id].rawAt(a1) !== ''; });
-        var b = h('<button class="btn" style="padding:5px 11px;font-size:12px' +
-          (t.id === task.id ? ';border-color:var(--accent);color:var(--accent)' : '') +
-          (filled ? ';background:var(--ok-soft)' : '') + '" data-go="' + lv.id + '/' + t.id + '">' + (i + 1) + '</button>');
-        nav.appendChild(b);
+        var sh = state.exam.sheets[t.id];
+        var touched = (sh && G.targetCells(t).some(function (a1) { return sh.rawAt(a1) !== ''; })) ||
+          (state.exam.pivots[t.id] && state.exam.pivots[t.id].values && state.exam.pivots[t.id].values.length);
+        nav.appendChild(h('<button class="btn exam-chip' + (t.id === task.id ? ' current' : '') +
+          (touched ? ' filled' : '') + '" data-go="' + lv.id + '/' + t.id + '">' + (i + 1) + '</button>'));
       });
       panel.appendChild(nav);
     } else {
-      panel.appendChild(h('<div style="margin-top:auto;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);line-height:1.9">' +
-        '<span class="kbd">⌘D</span> заполнить вниз · <span class="kbd">⌘R</span> вправо<br>' +
-        '<span class="kbd">⌘T</span> доллары в ссылке · <span class="kbd">F2</span> править<br>' +
-        '<span class="kbd">⌘↓</span> к краю данных · <span class="kbd">⌘⇧↓</span> выделить</div>'));
+      panel.appendChild(h('<div class="shortcut-legend">' +
+        '<span class="kbd">⌘D</span> fill down · <span class="kbd">⌘R</span> fill right<br>' +
+        '<span class="kbd">⌘T</span> toggle $ · <span class="kbd">F2</span> edit cell<br>' +
+        '<span class="kbd">⌘↓</span> jump to edge · <span class="kbd">⌘⇧↓</span> select to edge' +
+        (task.table && !isPivot ? '<br><span class="kbd">⌘⇧F</span> turn the filter on' : '') +
+        '</div>'));
     }
     wrap.appendChild(panel);
 
-    var area = h(
-      '<section class="sheet-area">' +
+    /* ---- work area: sheet, and a pivot tab when the task needs one ---- */
+    var area = h('<section class="sheet-area"></section>');
+    var tabs = null;
+    if (isPivot) {
+      tabs = h('<div class="work-tabs">' +
+        '<button data-tab="pivot" class="active">Pivot table</button>' +
+        '<button data-tab="sheet">Source data</button></div>');
+      area.appendChild(tabs);
+    }
+    var sheetPane = h(
+      '<div class="pane" id="pane-sheet">' +
         '<div class="formula-bar">' +
           '<div class="fb-addr" id="fb-addr">A1</div>' +
           '<div class="fb-fx">fx</div>' +
@@ -321,7 +343,16 @@
         '</div>' +
         '<div class="grid-wrap" id="grid-host"></div>' +
         '<div class="statusbar" id="statusbar"></div>' +
-      '</section>');
+      '</div>');
+    var pivotPane = h('<div class="pane" id="pane-pivot"></div>');
+    if (isPivot) { area.appendChild(pivotPane); sheetPane.hidden = true; }
+    area.appendChild(sheetPane);
+    if (task.table && !isPivot) {
+      sheetPane.insertBefore(h('<div class="table-tools">' +
+        '<button class="btn" id="btn-filter">Turn filter on <span class="kbd">⌘⇧F</span></button>' +
+        '<span class="tools-note">Then click the ▾ arrows in the header row to sort or filter.</span>' +
+        '</div>'), sheetPane.firstChild);
+    }
     wrap.appendChild(area);
     show(wrap);
 
@@ -335,6 +366,7 @@
       rows: (task.sheet && task.sheet.rows) || 20,
       cols: (task.sheet && task.sheet.cols) || 10,
       targets: targets,
+      readOnly: isPivot,
       onFlash: toast,
       onSelect: function (info) {
         fbAddr.textContent = info.rangeAddr;
@@ -344,18 +376,49 @@
       },
       onChange: function (ev) {
         if (ev.type === 'editing') fbInput.value = ev.text;
-        if (grid && (ev.type === 'commit' || ev.type === 'fill' || ev.type === 'paste' || ev.type === 'clear' || ev.type === 'undo')) {
-          grid.paint();
-        }
+        if (grid && ['commit', 'fill', 'paste', 'clear', 'undo'].indexOf(ev.type) >= 0) grid.paint();
       }
     });
     state.grid = grid;
-    grid.focus();
+
+    /* pivot builder */
+    state.pivot = null;
+    if (isPivot) {
+      var store = examMode ? state.exam.pivots : state.pivots;
+      var builder = new root.XLPivotUI.PivotBuilder(pivotPane, sheet, task.expect.pivot.source || task.table,
+        function (cfg) { store[task.id] = cfg; });
+      state.pivot = builder;
+      if (store[task.id] && (store[task.id].rows.length || store[task.id].values.length)) {
+        builder.setConfig(store[task.id]);
+      }
+      Array.prototype.forEach.call(tabs.children, function (b) {
+        b.addEventListener('click', function () {
+          Array.prototype.forEach.call(tabs.children, function (x) { x.classList.remove('active'); });
+          b.classList.add('active');
+          sheetPane.hidden = b.dataset.tab !== 'sheet';
+          pivotPane.hidden = b.dataset.tab !== 'pivot';
+          if (b.dataset.tab === 'sheet') grid.paint();
+        });
+      });
+    } else {
+      grid.focus();
+    }
+
+    var filterBtn = document.getElementById('btn-filter');
+    if (filterBtn) {
+      filterBtn.addEventListener('click', function () {
+        grid.setFiltersOn(!grid.filtersOn);
+        filterBtn.innerHTML = grid.filtersOn
+          ? 'Turn filter off <span class="kbd">⌘⇧F</span>'
+          : 'Turn filter on <span class="kbd">⌘⇧F</span>';
+        grid.focus();
+      });
+    }
 
     fbInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (!grid.canEdit(grid.sel.r, grid.sel.c)) { toast('Эта ячейка — исходные данные'); return; }
+        if (!grid.canEdit(grid.sel.r, grid.sel.c)) { toast('That cell holds source data and cannot be changed'); return; }
         grid.setCell(XLF.rcToA1(grid.sel.r, grid.sel.c), fbInput.value);
         grid.select(grid.sel.r + 1, grid.sel.c);
         grid.focus();
@@ -363,36 +426,63 @@
       if (e.key === 'Escape') { fbInput.value = sheet.raw(grid.sel.r, grid.sel.c); grid.focus(); }
     });
 
-    /* --- обработчики учебного режима --- */
+    function extras() { return state.pivot ? { pivot: state.pivot.getConfig() } : undefined; }
+
     if (!examMode) {
       document.getElementById('btn-check').addEventListener('click', function () {
-        var res = G.grade(task, sheet);
+        var res = G.grade(task, sheet, extras());
         var rec = Store.recordAttempt(task, res, {});
         updateHeader();
-        showResult(resultSlot, res, task, rec, lv);
+        showResult(resultSlot, res, task, rec, lv, sheet);
       });
       document.getElementById('btn-hint').addEventListener('click', function () {
         if (hintSlot.firstChild) return;
         Store.recordAttempt(task, { score: Store.task(task.id).best, passed: false }, { hinted: true });
-        hintSlot.appendChild(h('<div class="hintbox"><b>Подсказка (−30% баллов)</b>' + esc(task.hint) + '</div>'));
+        hintSlot.appendChild(h('<div class="hintbox"><b>Hint — costs 30% of this task’s points</b>' + esc(task.hint) + '</div>'));
         updateHeader();
+      });
+      document.getElementById('btn-explain').addEventListener('click', function () {
+        resultSlot.innerHTML = '';
+        resultSlot.appendChild(buildExplanation(task, sheet, { alwaysOpen: true }));
       });
       document.getElementById('btn-reset').addEventListener('click', function () {
         targets.forEach(function (a1) { sheet.setAt(a1, '', { locked: false }); });
+        sheet.clearFilters();
+        if (state.pivot) state.pivot.reset();
         grid.paint(); resultSlot.innerHTML = '';
-        toast('Лист очищен');
+        toast('This task only — your points and every other task are untouched');
       });
       document.getElementById('btn-solution').addEventListener('click', function () {
-        if (!confirm('Показать эталонное решение? За задачу останется не больше 40% баллов.')) return;
-        G.applySolution(sheet, task);
+        if (!confirm('Show the worked answer? This task will keep at most 40% of its points — everything else you have earned stays exactly as it is.')) return;
+        var pivotCfg = G.applyFullSolution(sheet, task);
+        if (pivotCfg && state.pivot) state.pivot.setConfig(pivotCfg);
         Store.recordAttempt(task, { score: 1, passed: true }, { seenSolution: true });
         grid.paint(); updateHeader();
-        var box = h('<div class="solution-box"><b>Эталонное решение</b></div>');
-        Object.keys(task.solution).forEach(function (ref) {
+        resultSlot.innerHTML = '';
+        var box = h('<div class="solution-box"><b>The reference answer</b></div>');
+        Object.keys(task.solution || {}).forEach(function (ref) {
           box.appendChild(h('<div>' + esc(ref) + ' → ' + esc(task.solution[ref]) + '</div>'));
         });
-        resultSlot.innerHTML = '';
+        if (task.expect && task.expect.sortedBy) {
+          box.appendChild(h('<div>Sorted by column ' + task.expect.sortedBy.col +
+            (task.expect.sortedBy.asc ? ', smallest first' : ', largest first') + '</div>'));
+        }
+        if (task.expect && task.expect.filtered) {
+          box.appendChild(h('<div>Filter on column ' + task.expect.filtered.col + ': ' +
+            esc(task.expect.filtered.values.join(', ')) + '</div>'));
+        }
+        if (pivotCfg) {
+          box.appendChild(h('<div>Rows: ' + esc(pivotCfg.rows.join(', ') || '—') + '</div>'));
+          box.appendChild(h('<div>Columns: ' + esc(pivotCfg.cols.join(', ') || '—') + '</div>'));
+          box.appendChild(h('<div>Values: ' + esc(pivotCfg.values.map(PV.specLabel).join(', ')) + '</div>'));
+          if (pivotCfg.filters.length) {
+            box.appendChild(h('<div>Filters: ' + esc(pivotCfg.filters.map(function (f) {
+              return f.field + ' = ' + f.values.join('/');
+            }).join('; ')) + '</div>'));
+          }
+        }
         resultSlot.appendChild(box);
+        resultSlot.appendChild(buildExplanation(task, sheet, { alwaysOpen: true }));
       });
     } else {
       var prev = document.getElementById('btn-prev');
@@ -400,7 +490,7 @@
       var nx = document.getElementById('btn-next');
       if (nx) nx.addEventListener('click', function () { go(lv.id + '/' + lv.tasks[idx + 1].id); });
       document.getElementById('btn-finish').addEventListener('click', function () {
-        if (confirm('Завершить экзамен и посмотреть результат?')) finishExam();
+        if (confirm('Finish the mock test and see how you did?')) finishExam();
       });
       tickExam();
     }
@@ -410,54 +500,117 @@
     var left = 0;
     targets.forEach(function (a1) { if (sheet.rawAt(a1) === '') left++; });
     bar.innerHTML =
-      '<span>Сумма: <b>' + fmt(info.sum) + '</b></span>' +
-      '<span>Среднее: <b>' + fmt(info.avg) + '</b></span>' +
-      '<span>Числа: <b>' + info.numCount + '</b></span>' +
-      '<span>Ячеек: <b>' + info.count + '</b></span>' +
+      '<span>Sum: <b>' + fmt(info.sum) + '</b></span>' +
+      '<span>Average: <b>' + fmt(info.avg) + '</b></span>' +
+      '<span>Numbers: <b>' + info.numCount + '</b></span>' +
+      '<span>Cells: <b>' + info.count + '</b></span>' +
       '<span class="spacer"></span>' +
-      '<span>Осталось заполнить: <b>' + left + '</b> из ' + targets.length + '</span>';
+      (targets.length ? '<span>Still to fill: <b>' + left + '</b> of ' + targets.length + '</span>' : '');
   }
 
-  function showResult(slot, res, task, rec, lv) {
+  /* --------------------------------------------------------- explanation */
+  function buildExplanation(task, sheet, opts) {
+    opts = opts || {};
+    var box = h('<div class="explain"></div>');
+    var ex = task.explain || {};
+    box.appendChild(h('<div class="ex-h">How this works</div>'));
+    if (ex.idea) box.appendChild(h('<div class="ex-idea">' + esc(ex.idea) + '</div>'));
+    if ((ex.walk || []).length) {
+      var ol = h('<ol class="ex-walk"></ol>');
+      ex.walk.forEach(function (line) { ol.appendChild(h('<li>' + esc(line) + '</li>')); });
+      box.appendChild(ol);
+    }
+
+    // the learner's own formulas, taken apart piece by piece
+    var cells = G.targetCells(task).filter(function (a1) {
+      var raw = sheet.rawAt(a1);
+      return raw && raw.charAt(0) === '=';
+    });
+    var seen = {}, shown = 0;
+    cells.forEach(function (a1) {
+      if (shown >= 3) return;
+      var raw = sheet.rawAt(a1);
+      var key = raw.replace(/[0-9]+/g, '#');
+      if (seen[key]) return;
+      seen[key] = 1;
+      shown++;
+      var rc = XLF.a1ToRC(a1);
+      var res = XP.explain(raw, sheet, { row: rc.row, col: rc.col });
+      if (!res.ok) return;
+      var det = h('<details class="ex-formula"' + (opts.alwaysOpen && shown === 1 ? ' open' : '') + '></details>');
+      det.appendChild(h('<summary>Your formula in ' + a1 + ': <code>' + esc(raw) + '</code> → <b>' + esc(res.result) + '</b></summary>'));
+      var body = h('<div class="ex-steps"></div>');
+      res.steps.forEach(function (st) {
+        var row = h('<div class="ex-step" style="margin-left:' + (st.depth * 16) + 'px"></div>');
+        if (st.kind === 'call' || st.kind === 'op') {
+          row.appendChild(h('<div class="es-expr"><code>' + esc(st.expr) + '</code> <span class="es-val">= ' + esc(st.value) + '</span></div>'));
+          row.appendChild(h('<div class="es-title">' + esc(st.title) + '</div>'));
+          if (st.note) row.appendChild(h('<div class="es-note">' + esc(st.note) + '</div>'));
+        } else {
+          row.appendChild(h('<div class="es-arg">' + (st.label ? '<i>' + esc(st.label) + ':</i> ' : '') +
+            '<code>' + esc(st.expr) + '</code> <span class="es-val">= ' + esc(st.value) + '</span></div>'));
+        }
+        body.appendChild(row);
+      });
+      det.appendChild(body);
+      box.appendChild(det);
+    });
+
+    if ((ex.mistakes || []).length) {
+      box.appendChild(h('<div class="ex-h2">What people get wrong</div>'));
+      var ul = h('<ul class="ex-mistakes"></ul>');
+      ex.mistakes.forEach(function (m) { ul.appendChild(h('<li>' + esc(m) + '</li>')); });
+      box.appendChild(ul);
+    }
+    if (ex.onTheJob) {
+      box.appendChild(h('<div class="ex-job"><b>On a real project.</b> ' + esc(ex.onTheJob) + '</div>'));
+    }
+    return box;
+  }
+
+  function showResult(slot, res, task, rec, lv, sheet) {
     slot.innerHTML = '';
     if (res.passed) {
       var next = lv.tasks[lv.tasks.indexOf(task) + 1];
-      var box = h('<div class="result ok"><b>Верно.</b> Задача засчитана: ' + rec.earned + ' из ' + task.points + ' баллов.' +
-        (rec.delta ? ' <b>+' + rec.delta + ' XP</b>' : '') + '</div>');
-      slot.appendChild(box);
-      var nav = h('<div class="panel-actions" style="margin-top:10px"></div>');
-      if (next) nav.appendChild(h('<button class="btn btn-primary" data-go="' + lv.id + '/' + next.id + '">Следующая задача →</button>'));
-      else nav.appendChild(h('<button class="btn btn-primary" data-level="' + lv.id + '">Уровень пройден →</button>'));
+      slot.appendChild(h('<div class="result ok"><b>Correct.</b> ' + rec.earned + ' of ' + task.points + ' points' +
+        (rec.delta ? ' · <b>+' + rec.delta + ' XP</b>' : '') + '</div>'));
+      slot.appendChild(buildExplanation(task, sheet, { alwaysOpen: true }));
+      var nav = h('<div class="panel-actions" style="margin-top:12px"></div>');
+      if (next) nav.appendChild(h('<button class="btn btn-primary" data-go="' + lv.id + '/' + next.id + '">Next question →</button>'));
+      else nav.appendChild(h('<button class="btn btn-primary" data-level="' + lv.id + '">Level complete →</button>'));
       slot.appendChild(nav);
       return;
     }
     var bad = res.cells.filter(function (c) { return !c.ok; });
-    var html = '<div class="result bad"><b>Пока не сходится.</b> Верно ' + res.okCount + ' из ' + res.total + ' ячеек.<ul>';
+    var html = '<div class="result bad"><b>Not there yet.</b> ' + res.okCount + ' of ' + res.total + ' checks pass. ' +
+      'Nothing is lost — fix it and press Check again.<ul>';
     bad.slice(0, 6).forEach(function (c) {
-      html += '<li><code>' + c.cell + '</code> — ' + esc(c.reason) + '</li>';
+      html += '<li><code>' + esc(c.cell) + '</code> — ' + esc(c.reason) + '</li>';
     });
-    if (bad.length > 6) html += '<li>…и ещё ' + (bad.length - 6) + '</li>';
+    if (bad.length > 6) html += '<li>…and ' + (bad.length - 6) + ' more</li>';
     html += '</ul></div>';
     slot.appendChild(h(html));
   }
 
-  /* =============================================================== ЭКЗАМЕН = */
+  /* ============================================================== EXAM === */
   function startExam(lv) {
-    state.exam = { level: lv, started: Date.now(), sheets: {}, finished: false };
-    lv.tasks.forEach(function (t) { state.exam.sheets[t.id] = G.buildSheet(t); });
+    state.exam = { level: lv, started: Date.now(), sheets: {}, pivots: {}, finished: false };
+    lv.tasks.forEach(function (t) {
+      state.exam.sheets[t.id] = G.buildSheet(t);
+      state.exam.pivots[t.id] = { rows: [], cols: [], values: [], filters: [] };
+    });
     go(lv.id + '/' + lv.tasks[0].id);
   }
 
   function tickExam() {
     clearInterval(state.timerId);
-    var elTimer = document.getElementById('exam-timer');
-    if (!elTimer || !state.exam) return;
+    if (!document.getElementById('exam-timer') || !state.exam) return;
     var lv = state.exam.level;
     function upd() {
       var left = lv.timeLimitSec - (Date.now() - state.exam.started) / 1000;
       var e = document.getElementById('exam-timer');
       if (!e) { clearInterval(state.timerId); return; }
-      e.textContent = 'Осталось ' + mmss(left);
+      e.textContent = mmss(left) + ' left';
       e.className = 'timer' + (left < 300 ? ' urgent' : '');
       if (left <= 0) { clearInterval(state.timerId); finishExam(true); }
     }
@@ -471,7 +624,8 @@
     if (!ex) return renderHome();
     var lv = ex.level, rows = [], points = 0, maxPoints = 0;
     lv.tasks.forEach(function (t) {
-      var res = G.grade(t, ex.sheets[t.id]);
+      var extra = t.mode === 'pivot' ? { pivot: ex.pivots[t.id] } : undefined;
+      var res = G.grade(t, ex.sheets[t.id], extra);
       var earned = Math.round(t.points * res.score);
       points += earned; maxPoints += t.points;
       Store.recordAttempt(t, res, {});
@@ -486,10 +640,11 @@
     var page = h('<div class="page"></div>');
     var passed = share >= lv.passScore;
     page.appendChild(h(
-      '<div class="page-head"><div class="crumbs"><button data-nav="home">Программа</button> › Результат экзамена</div>' +
-      '<h1>' + (passed ? 'Экзамен сдан' : 'Экзамен не сдан') + '</h1>' +
-      '<p>' + Math.round(share * 100) + '% (' + points + ' из ' + maxPoints + ' баллов) за ' + mmss(seconds) +
-      (byTime ? '. Время вышло.' : '') + ' Проходной порог — ' + Math.round(lv.passScore * 100) + '%.</p></div>'));
+      '<div class="page-head"><div class="crumbs"><button data-nav="home">Programme</button> › Result</div>' +
+      '<h1>' + (passed ? 'Passed' : 'Not passed this time') + '</h1>' +
+      '<p>' + Math.round(share * 100) + '% (' + points + ' of ' + maxPoints + ' points) in ' + mmss(seconds) +
+      (byTime ? '. Time ran out.' : '') + ' The pass mark is ' + Math.round(lv.passScore * 100) + '%. ' +
+      'Open any question below to see the worked answer — your other progress is untouched.</p></div>'));
 
     var list = h('<div class="task-list"></div>');
     rows.forEach(function (r) {
@@ -499,33 +654,33 @@
         '<div class="card task-row" data-go="' + lv.id + '/' + r.task.id + '">' +
           '<div class="task-status ' + cls + '">' + (r.res.passed ? '✓' : '✗') + '</div>' +
           '<div class="task-row-main"><div class="task-row-title">' + esc(r.task.title) + '</div>' +
-          '<div class="task-row-brief">' + (r.res.passed ? 'верно' :
-            'верно ' + r.res.okCount + ' из ' + r.res.total + ' ячеек' +
+          '<div class="task-row-brief">' + (r.res.passed ? 'correct' :
+            r.res.okCount + ' of ' + r.res.total + ' checks passed' +
             (wrong.length ? ' · ' + esc(wrong[0].cell + ': ' + wrong[0].reason) : '')) + '</div></div>' +
           '<div class="task-row-points">' + r.earned + ' / ' + r.task.points + '</div>' +
         '</div>'));
     });
     page.appendChild(list);
     page.appendChild(h('<div class="panel-actions" style="margin-top:18px">' +
-      '<button class="btn btn-primary" data-level="' + lv.id + '">Пройти ещё раз</button>' +
-      '<button class="btn" data-nav="home">К программе</button></div>'));
+      '<button class="btn btn-primary" data-level="' + lv.id + '">Sit it again</button>' +
+      '<button class="btn" data-nav="home">Back to the programme</button></div>'));
     show(page);
   }
 
-  /* ================================================================ ДОДЗЁ = */
+  /* ============================================================== DOJO === */
   function renderDojo(mode) {
     var page = h('<div class="page"><div class="dojo"></div></div>');
     var box = page.firstChild;
     box.appendChild(h(
       '<div class="page-head" style="text-align:center">' +
-        '<h1>Додзё горячих клавиш</h1>' +
-        '<p style="margin:0 auto">На тесте мышь — это потерянные минуты. Отвечайте цифрами 1–4 с клавиатуры.</p>' +
+        '<h1>Shortcut dojo</h1>' +
+        '<p style="margin:0 auto">On a 60-minute test the mouse costs you a third of your time. Answer with the number keys 1–4.</p>' +
       '</div>'));
     var tabs = h('<div class="ref-tabs" style="justify-content:center">' +
-      '<button data-mode="mixed">Всё вперемешку</button>' +
-      '<button data-mode="shortcuts">Клавиши</button>' +
-      '<button data-mode="functions">Функции</button>' +
-      '<button data-mode="errors">Ошибки</button>' +
+      '<button data-mode="mixed">Everything</button>' +
+      '<button data-mode="shortcuts">Shortcuts</button>' +
+      '<button data-mode="functions">Functions</button>' +
+      '<button data-mode="errors">Errors</button>' +
       '</div>');
     box.appendChild(tabs);
     var card = h('<div class="card dojo-card"></div>');
@@ -543,21 +698,21 @@
     function draw() {
       if (i >= qs.length) {
         card.innerHTML = '';
-        card.appendChild(h('<div class="dojo-prompt">Серия закончена</div>'));
-        card.appendChild(h('<div style="font-size:34px;margin:14px 0;color:var(--navy)"><b>' + correct + '</b> из ' + qs.length + '</div>'));
-        card.appendChild(h('<div class="dojo-why" style="text-align:center">Всего верных ответов за всё время: ' +
-          Store.data.drills.correct + ' из ' + Store.data.drills.total + ' · лучшая серия подряд: ' + Store.data.drills.bestStreak + '</div>'));
-        var again = h('<div class="panel-actions" style="justify-content:center;margin-top:18px">' +
-          '<button class="btn btn-primary" id="again">Ещё серия</button>' +
-          '<button class="btn" data-nav="home">К программе</button></div>');
-        card.appendChild(again);
+        card.appendChild(h('<div class="dojo-prompt">Round finished</div>'));
+        card.appendChild(h('<div style="font-size:34px;margin:14px 0;color:var(--navy)"><b>' + correct + '</b> of ' + qs.length + '</div>'));
+        card.appendChild(h('<div class="dojo-why" style="text-align:center">All-time: ' +
+          Store.data.drills.correct + ' correct out of ' + Store.data.drills.total +
+          ' · best streak ' + Store.data.drills.bestStreak + '</div>'));
+        card.appendChild(h('<div class="panel-actions" style="justify-content:center;margin-top:18px">' +
+          '<button class="btn btn-primary" id="again">Another round</button>' +
+          '<button class="btn" data-nav="home">Back to the programme</button></div>'));
         document.getElementById('again').addEventListener('click', function () { renderDojo(mode); });
         return;
       }
       var q = qs[i];
       card.innerHTML = '';
-      card.appendChild(h('<div class="dojo-meta"><span>Вопрос ' + (i + 1) + ' из ' + qs.length + '</span>' +
-        '<span>Серия подряд: ' + streak + '</span></div>'));
+      card.appendChild(h('<div class="dojo-meta"><span>Question ' + (i + 1) + ' of ' + qs.length + '</span>' +
+        '<span>Streak: ' + streak + '</span></div>'));
       card.appendChild(h('<div class="dojo-prompt">' + esc(q.prompt) + '</div>'));
       if (q.keys) card.appendChild(h('<div class="dojo-keys">' + esc(q.keys) + '</div>'));
       var opts = h('<div class="dojo-options"></div>');
@@ -580,9 +735,8 @@
         Store.recordDrill(ok, streak);
         updateHeader();
         if (q.why) card.appendChild(h('<div class="dojo-why">' + esc(q.why) + '</div>'));
-        var nb = h('<div class="panel-actions" style="justify-content:center;margin-top:16px">' +
-          '<button class="btn btn-primary" id="nextq">Дальше <span class="kbd">Enter</span></button></div>');
-        card.appendChild(nb);
+        card.appendChild(h('<div class="panel-actions" style="justify-content:center;margin-top:16px">' +
+          '<button class="btn btn-primary" id="nextq">Next <span class="kbd">Enter</span></button></div>'));
         document.getElementById('nextq').addEventListener('click', function () { i++; draw(); });
         card.dataset.answered = '1';
       }
@@ -601,54 +755,53 @@
     draw();
   }
 
-  /* =========================================================== СПРАВОЧНИК = */
+  /* ========================================================= REFERENCE === */
   var FUNC_REF = [
-    ['СУММ(диапазон)', 'Математика', 'Сумма чисел. Текст и пустые ячейки игнорируются.'],
-    ['СРЗНАЧ(диапазон)', 'Математика', 'Среднее арифметическое по числам диапазона.'],
-    ['ОКРУГЛ(x; знаков)', 'Математика', 'Округление. Отрицательное число знаков округляет до десятков, сотен, тысяч.'],
-    ['ОКРУГЛВВЕРХ(x; знаков)', 'Математика', 'Всегда вверх — для штук, машин, смен, людей.'],
-    ['СУММПРОИЗВ(a; b)', 'Математика', 'Сумма попарных произведений. С логическими условиями заменяет СУММЕСЛИМН.'],
-    ['ЕСЛИ(условие; да; нет)', 'Логика', 'Ветвление. Текст всегда в кавычках.'],
-    ['И(...) / ИЛИ(...)', 'Логика', 'Все условия сразу / хотя бы одно. Используются внутри ЕСЛИ.'],
-    ['ЕСЛИОШИБКА(формула; значение)', 'Логика', 'Подменяет любую ошибку. Применять только осознанно.'],
-    ['СУММЕСЛИ(где; что; что сложить)', 'Условные', 'Одно условие. Диапазон суммирования — третий аргумент.'],
-    ['СУММЕСЛИМН(что сложить; где1; что1; …)', 'Условные', 'Несколько условий. Диапазон суммирования — ПЕРВЫЙ аргумент.'],
-    ['СЧЁТЕСЛИМН(где1; что1; …)', 'Условные', 'Количество строк, удовлетворяющих всем условиям.'],
-    ['СРЗНАЧЕСЛИМН(что усреднить; где1; что1; …)', 'Условные', 'Среднее по условиям.'],
-    ['ВПР(что; таблица; столбец; 0)', 'Поиск', 'Точный поиск по первому столбцу таблицы. Последний аргумент 0 обязателен.'],
-    ['ВПР(что; таблица; столбец; 1)', 'Поиск', 'Приблизительный поиск по возрастающей шкале: грейды, скидки, ставки.'],
-    ['ИНДЕКС(что вернуть; строка; столбец)', 'Поиск', 'Значение по номеру строки и столбца.'],
-    ['ПОИСКПОЗ(что; где; 0)', 'Поиск', 'Номер позиции значения в строке или столбце.'],
-    ['ПРОСМОТРX(что; где; что вернуть; если нет)', 'Поиск', 'Современная замена ВПР: ищет в любую сторону и сам обрабатывает промах.'],
-    ['ЛЕВСИМВ / ПРАВСИМВ / ПСТР', 'Текст', 'Вырезать часть строки слева, справа, из середины.'],
-    ['НАЙТИ(что; где; [с какой позиции])', 'Текст', 'Позиция подстроки. С третьим аргументом ищет второе вхождение.'],
-    ['ПОДСТАВИТЬ(текст; что; на что)', 'Текст', 'Замена фрагмента. Основной инструмент чистки выгрузок.'],
-    ['ЗНАЧЕН(текст)', 'Текст', 'Текст → число. Работает после чистки пробелов и валюты.'],
-    ['СЖПРОБЕЛЫ(текст)', 'Текст', 'Убирает лишние пробелы по краям и внутри.'],
-    ['ГОД / МЕСЯЦ / ДЕНЬ', 'Даты', 'Разбор даты на части.'],
-    ['КОНМЕСЯЦА(дата; сдвиг)', 'Даты', 'Последний день месяца через N месяцев. Для графиков платежей.'],
-    ['ДАТАМЕС(дата; сдвиг)', 'Даты', 'Тот же день через N месяцев.'],
-    ['РАЗНДАТ(нач; кон; "y"/"m"/"ym")', 'Даты', 'Полных лет / месяцев между датами.'],
-    ['ЧПС(ставка; потоки)', 'Финансы', 'Дисконтирует с первого периода. Поток года 0 прибавляют отдельно.'],
-    ['ВСД(потоки)', 'Финансы', 'IRR — ставка, при которой NPV = 0.'],
-    ['ПЛТ(ставка; периоды; сумма)', 'Финансы', 'Аннуитетный платёж. Годовую ставку делят на 12.'],
-    ['НАИБОЛЬШИЙ(диапазон; k)', 'Анализ', 'k-е по величине значение. Для анализа концентрации.'],
-    ['ПЕРСЕНТИЛЬ.ВКЛ(диапазон; p)', 'Анализ', 'Перцентиль распределения.'],
-    ['РАНГ(x; диапазон)', 'Анализ', 'Место значения в списке.']
+    ['SUM(range)', 'Maths', 'Adds the numbers. Text and blanks are ignored.'],
+    ['AVERAGE(range)', 'Maths', 'Mean of the numbers in the range.'],
+    ['ROUND(x, digits)', 'Maths', 'Rounds. A negative digit count rounds to tens, hundreds, thousands.'],
+    ['ROUNDUP(x, digits)', 'Maths', 'Always away from zero — for units, trucks, shifts, people.'],
+    ['SUMPRODUCT(a, b)', 'Maths', 'Sum of pairwise products. With conditions inside it replaces SUMIFS.'],
+    ['IF(test, yes, no)', 'Logic', 'The basic branch. Text always in quotes.'],
+    ['AND(...) / OR(...)', 'Logic', 'Every condition / at least one. Used inside IF.'],
+    ['IFERROR(formula, fallback)', 'Logic', 'Replaces any error. Use deliberately, not as a reflex.'],
+    ['SUMIF(test range, criterion, sum range)', 'Conditional', 'One condition. Sum range comes last.'],
+    ['SUMIFS(sum range, test1, crit1, …)', 'Conditional', 'Several conditions. Sum range comes FIRST.'],
+    ['COUNTIFS(test1, crit1, …)', 'Conditional', 'How many rows satisfy every condition.'],
+    ['AVERAGEIFS(avg range, test1, crit1, …)', 'Conditional', 'Average under conditions.'],
+    ['SUBTOTAL(9, range)', 'Tables', 'Sums the VISIBLE rows only. 1=average, 2=count, 3=counta, 4=max, 5=min, 9=sum.'],
+    ['VLOOKUP(key, table, col, 0)', 'Lookup', 'Exact match down the first column. The final 0 is not optional.'],
+    ['VLOOKUP(key, table, col, 1)', 'Lookup', 'Approximate match on an ascending ladder: grades, discounts, tax bands.'],
+    ['INDEX(range, row, col)', 'Lookup', 'The value at a position.'],
+    ['MATCH(key, range, 0)', 'Lookup', 'The position of a value. Pair it with INDEX to look leftwards.'],
+    ['XLOOKUP(key, look in, return, if missing)', 'Lookup', 'Modern replacement for VLOOKUP: any direction, built-in fallback.'],
+    ['LEFT / RIGHT / MID', 'Text', 'Cut a string from the left, the right, or the middle.'],
+    ['FIND(what, where, [start])', 'Text', 'Position of a fragment. The third argument finds the second occurrence.'],
+    ['SUBSTITUTE(text, old, new)', 'Text', 'Replace a fragment. The workhorse of cleaning up exports.'],
+    ['VALUE(text)', 'Text', 'Text that looks like a number becomes a number.'],
+    ['YEAR / MONTH / DAY', 'Dates', 'Take a date apart.'],
+    ['EOMONTH(date, months)', 'Dates', 'Last day of the month, n months away. For payment schedules.'],
+    ['DATEDIF(start, end, "y")', 'Dates', 'Whole years, months ("m"), or months beyond whole years ("ym").'],
+    ['NPV(rate, flows)', 'Finance', 'Discounts from period 1. Add the year-0 flow separately.'],
+    ['IRR(flows)', 'Finance', 'The rate at which NPV is zero.'],
+    ['PMT(rate, periods, amount)', 'Finance', 'Level loan payment. Annual rate ÷ 12, years × 12.'],
+    ['LARGE(range, k)', 'Analysis', 'The k-th largest value. For concentration analysis.'],
+    ['PERCENTILE.INC(range, p)', 'Analysis', 'Percentile of a distribution.'],
+    ['RANK(value, range)', 'Analysis', 'Where a value places in the list.']
   ];
 
   function renderReference(tab) {
     tab = tab || 'shortcuts';
     var page = h('<div class="page"></div>');
-    page.appendChild(h('<div class="page-head"><h1>Справочник</h1>' +
-      '<p>Всё, что спрашивают на тесте: сочетания клавиш для Excel на macOS и функции с типовым применением.</p></div>'));
+    page.appendChild(h('<div class="page-head"><h1>Reference</h1>' +
+      '<p>Everything the test asks about: Excel shortcuts for macOS, the functions with their typical use, and what each error means.</p></div>'));
     var tabs = h('<div class="ref-tabs">' +
-      '<button data-tab="shortcuts">Горячие клавиши</button>' +
-      '<button data-tab="functions">Функции</button>' +
-      '<button data-tab="errors">Ошибки Excel</button>' +
+      '<button data-tab="shortcuts">Shortcuts</button>' +
+      '<button data-tab="functions">Functions</button>' +
+      '<button data-tab="errors">Excel errors</button>' +
       '<button data-tab="platform">Mac / Windows</button></div>');
     page.appendChild(tabs);
-    var search = h('<input class="ref-search" placeholder="Поиск по справочнику…">');
+    var search = h('<input class="ref-search" placeholder="Search the reference…">');
     page.appendChild(search);
     var holder = h('<div class="card" style="overflow:auto;max-height:65vh"></div>');
     page.appendChild(holder);
@@ -663,9 +816,9 @@
       filter = (filter || '').toLowerCase();
       var t = h('<table class="ref"></table>');
       if (tab === 'shortcuts' || tab === 'platform') {
-        t.appendChild(h('<thead><tr><th style="width:140px">macOS</th>' +
-          (tab === 'platform' ? '<th style="width:160px">Windows</th>' : '') +
-          '<th>Действие</th><th style="width:34%">Зачем это нужно</th></tr></thead>'));
+        t.appendChild(h('<thead><tr><th style="width:150px">macOS</th>' +
+          (tab === 'platform' ? '<th style="width:170px">Windows</th>' : '') +
+          '<th>What it does</th><th style="width:34%">Why it matters</th></tr></thead>'));
         var tb = h('<tbody></tbody>');
         DRILLS.SHORTCUTS.forEach(function (s) {
           var hay = (s.mac + ' ' + s.win + ' ' + s.action + ' ' + s.cat + ' ' + s.why).toLowerCase();
@@ -676,7 +829,7 @@
         });
         t.appendChild(tb);
       } else if (tab === 'functions') {
-        t.appendChild(h('<thead><tr><th style="width:300px">Функция</th><th style="width:110px">Раздел</th><th>Когда применять</th></tr></thead>'));
+        t.appendChild(h('<thead><tr><th style="width:330px">Function</th><th style="width:120px">Group</th><th>When to use it</th></tr></thead>'));
         var tb2 = h('<tbody></tbody>');
         FUNC_REF.forEach(function (f) {
           var hay = (f[0] + ' ' + f[1] + ' ' + f[2]).toLowerCase();
@@ -685,7 +838,7 @@
         });
         t.appendChild(tb2);
       } else {
-        t.appendChild(h('<thead><tr><th style="width:150px">Ошибка</th><th>Что означает</th><th style="width:38%">Что делать</th></tr></thead>'));
+        t.appendChild(h('<thead><tr><th style="width:150px">Error</th><th>What it means</th><th style="width:38%">What to do</th></tr></thead>'));
         var tb3 = h('<tbody></tbody>');
         DRILLS.ERROR_QUIZ.forEach(function (e) {
           var hay = (e.q + ' ' + e.options[e.answer] + ' ' + e.why).toLowerCase();
@@ -701,7 +854,7 @@
     draw('');
   }
 
-  /* ============================================================== ПРОГРЕСС */
+  /* ========================================================== PROGRESS === */
   function renderStats() {
     var d = Store.data;
     var totalMax = 0, totalGot = 0, solved = 0, all = 0;
@@ -710,27 +863,27 @@
       totalMax += s.max; totalGot += s.got; solved += s.done; all += s.total;
     });
     var page = h('<div class="page"></div>');
-    page.appendChild(h('<div class="page-head"><h1>Прогресс</h1><p>Где вы сейчас и что стоит повторить перед тестом.</p></div>'));
+    page.appendChild(h('<div class="page-head"><h1>Progress</h1><p>Where you are and what is worth going back to.</p></div>'));
     var grid = h('<div class="stat-grid"></div>');
     [
-      [d.xp, 'очков опыта'],
-      [solved + ' / ' + all, 'задач решено'],
-      [Math.round(totalGot / (totalMax || 1) * 100) + '%', 'программы пройдено'],
-      [d.streak.days, 'дней подряд'],
-      [d.drills.total ? Math.round(d.drills.correct / d.drills.total * 100) + '%' : '—', 'точность в додзё'],
-      [d.drills.bestStreak, 'лучшая серия подряд']
+      [d.xp, 'experience points'],
+      [solved + ' / ' + all, 'tasks solved'],
+      [Math.round(totalGot / (totalMax || 1) * 100) + '%', 'of the programme'],
+      [d.streak.days, 'days in a row'],
+      [d.drills.total ? Math.round(d.drills.correct / d.drills.total * 100) + '%' : '—', 'dojo accuracy'],
+      [d.drills.bestStreak, 'best dojo streak']
     ].forEach(function (s) {
       grid.appendChild(h('<div class="card stat"><b>' + s[0] + '</b><span>' + s[1] + '</span></div>'));
     });
     page.appendChild(grid);
 
     if (d.exams.length) {
-      page.appendChild(h('<h3 style="margin:22px 0 10px;font-size:16px">Экзамены</h3>'));
+      page.appendChild(h('<h3 style="margin:22px 0 10px;font-size:16px">Mock tests</h3>'));
       var t = h('<table class="ref"></table>');
-      t.appendChild(h('<thead><tr><th>Дата</th><th>Результат</th><th>Баллы</th><th>Время</th></tr></thead>'));
+      t.appendChild(h('<thead><tr><th>Date</th><th>Score</th><th>Points</th><th>Time</th></tr></thead>'));
       var tb = h('<tbody></tbody>');
       d.exams.slice().reverse().forEach(function (e) {
-        tb.appendChild(h('<tr><td>' + new Date(e.date).toLocaleString('ru-RU') + '</td>' +
+        tb.appendChild(h('<tr><td>' + new Date(e.date).toLocaleString('en-GB') + '</td>' +
           '<td class="k">' + Math.round(e.score * 100) + '%</td>' +
           '<td>' + e.points + ' / ' + e.maxPoints + '</td><td>' + mmss(e.seconds) + '</td></tr>'));
       });
@@ -741,28 +894,29 @@
     }
 
     var review = reviewQueue();
-    page.appendChild(h('<h3 style="margin:22px 0 10px;font-size:16px">На повторение — ' + review.length + '</h3>'));
-    if (!review.length) page.appendChild(h('<div class="card empty">Долгов нет. Хороший момент для экзамена.</div>'));
+    page.appendChild(h('<h3 style="margin:22px 0 10px;font-size:16px">Worth revisiting — ' + review.length + '</h3>'));
+    if (!review.length) page.appendChild(h('<div class="card empty">Nothing outstanding. Good moment for the mock test.</div>'));
     else {
       var list = h('<div class="review-list"></div>');
       review.forEach(function (r) {
         list.appendChild(h('<div class="card task-row" data-go="' + r.level.id + '/' + r.task.id + '">' +
           '<div class="task-status partial">↻</div>' +
           '<div class="task-row-main"><div class="task-row-title">' + esc(r.task.title) + '</div>' +
-          '<div class="task-row-brief">Уровень ' + r.level.id + ' · ' + esc(r.reason) + '</div></div>' +
+          '<div class="task-row-brief">Level ' + r.level.id + ' · ' + esc(r.reason) + '</div></div>' +
           '<div class="task-row-points">' + Store.earnedFor(r.task) + '/' + r.task.points + '</div></div>'));
       });
       page.appendChild(list);
     }
 
-    page.appendChild(h('<h3 style="margin:26px 0 10px;font-size:16px">Данные</h3>'));
-    var tools = h('<div class="panel-actions">' +
-      '<button class="btn" id="btn-export">Сохранить прогресс в файл</button>' +
-      '<button class="btn" id="btn-import">Загрузить из файла</button>' +
-      '<button class="btn btn-ghost" id="btn-wipe">Сбросить всё</button></div>');
-    page.appendChild(tools);
+    page.appendChild(h('<h3 style="margin:26px 0 10px;font-size:16px">Your data</h3>'));
+    page.appendChild(h('<div class="panel-actions">' +
+      '<button class="btn" id="btn-export">Save progress to a file</button>' +
+      '<button class="btn" id="btn-import">Load from a file</button>' +
+      '<button class="btn btn-ghost" id="btn-wipe">Erase everything</button></div>'));
     page.appendChild(h('<div style="margin-top:10px;font-size:12.5px;color:var(--muted)">' +
-      (Store.persistent ? 'Прогресс хранится в этом браузере.' : 'Внимание: сохранение недоступно, прогресс исчезнет при закрытии.') +
+      (Store.persistent ? 'Progress is kept in this browser and never leaves your machine. ' +
+        'Erasing is the only thing that removes it — no task, no failed attempt and no mock test ever does.'
+        : 'Warning: this browser will not let the page save anything, so progress disappears when you close it.') +
       '</div>'));
     show(page);
 
@@ -781,25 +935,27 @@
         if (!f) return;
         var rd = new FileReader();
         rd.onload = function () {
-          try { Store.importJSON(rd.result); updateHeader(); toast('Прогресс загружен'); renderStats(); }
-          catch (err) { toast('Не удалось прочитать файл'); }
+          try { Store.importJSON(rd.result); updateHeader(); toast('Progress loaded'); renderStats(); }
+          catch (err) { toast('That file could not be read'); }
         };
         rd.readAsText(f);
       };
       inp.click();
     });
     document.getElementById('btn-wipe').addEventListener('click', function () {
-      if (!confirm('Удалить весь прогресс? Действие необратимо.')) return;
-      Store.reset(); updateHeader(); renderStats(); toast('Прогресс сброшен');
+      if (!confirm('Erase all progress? This cannot be undone.')) return;
+      Store.reset(); updateHeader(); renderStats(); toast('Progress erased');
     });
   }
 
-  /* =============================================================== РОУТЕР = */
+  /* ============================================================ ROUTER === */
   function show(node) {
     clearInterval(state.timerId);
     clearTimeout(toastTimer);
     document.getElementById('toast').hidden = true;
     document.onkeydown = null;
+    if (state.grid) state.grid.closeFilterMenu();
+    state.grid = null; state.pivot = null;
     view.innerHTML = '';
     view.appendChild(node);
     window.scrollTo(0, 0);

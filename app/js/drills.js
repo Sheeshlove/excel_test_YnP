@@ -1,6 +1,6 @@
 /* =============================================================================
- * drills.js — «Додзё горячих клавиш» и блиц по функциям
- * Сочетания даны для Excel на macOS, в скобках — Windows-эквивалент.
+ * drills.js — the shortcut dojo and the rapid-fire quizzes
+ * Shortcuts are given for Excel on macOS, with the Windows equivalent beside.
  * ========================================================================== */
 (function (root, factory) {
   var mod = factory();
@@ -9,86 +9,93 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  /* Формат: mac, win, действие, категория, почему это важно консультанту */
+  /* Shape: mac, win, what it does, group, why a consultant cares */
   var SHORTCUTS = [
-    { mac: '⌘ + ↓', win: 'Ctrl + ↓', action: 'Перейти к последней заполненной ячейке столбца', cat: 'Навигация', why: 'Мгновенно узнать, сколько строк в выгрузке — вместо прокрутки колесом.' },
-    { mac: '⌘ + ⇧ + ↓', win: 'Ctrl + Shift + ↓', action: 'Выделить диапазон до конца данных', cat: 'Навигация', why: 'Основной способ выделить столбец под формулу без мыши.' },
-    { mac: '⌘ + ⇧ + →', win: 'Ctrl + Shift + →', action: 'Выделить диапазон вправо до конца данных', cat: 'Навигация', why: 'Выделение всей строки заголовков или всей таблицы за два нажатия.' },
-    { mac: '⌃ + пробел', win: 'Ctrl + пробел', action: 'Выделить весь столбец', cat: 'Навигация', why: 'Быстрое форматирование или удаление столбца целиком.' },
-    { mac: '⇧ + пробел', win: 'Shift + пробел', action: 'Выделить всю строку', cat: 'Навигация', why: 'Вставка и удаление строк без мыши.' },
-    { mac: '⌃ + A', win: 'Ctrl + A', action: 'Выделить текущую таблицу целиком', cat: 'Навигация', why: 'Один раз — таблица, два раза — весь лист.' },
-    { mac: 'fn + ⌃ + ←', win: 'Ctrl + Home', action: 'Перейти в ячейку A1', cat: 'Навигация', why: 'Вернуться в начало листа перед сохранением — признак аккуратного файла.' },
-    { mac: '⌃ + Page Down', win: 'Ctrl + Page Down', action: 'Перейти на следующий лист', cat: 'Навигация', why: 'В модели из 15 листов мышь — потеря времени.' },
+    { mac: '⌘ + ↓', win: 'Ctrl + ↓', action: 'Jump to the last filled cell of the column', cat: 'Navigation', why: 'Find out how many rows the export really has, instead of scrolling.' },
+    { mac: '⌘ + ⇧ + ↓', win: 'Ctrl + Shift + ↓', action: 'Select down to the end of the data', cat: 'Navigation', why: 'The standard way to select a column for a formula without touching the mouse.' },
+    { mac: '⌘ + ⇧ + →', win: 'Ctrl + Shift + →', action: 'Select right to the end of the data', cat: 'Navigation', why: 'Selects a header row or a whole table in two keystrokes.' },
+    { mac: '⌃ + Space', win: 'Ctrl + Space', action: 'Select the entire column', cat: 'Navigation', why: 'Format or delete a whole column at once.' },
+    { mac: '⇧ + Space', win: 'Shift + Space', action: 'Select the entire row', cat: 'Navigation', why: 'Insert and delete rows without the mouse.' },
+    { mac: '⌃ + A', win: 'Ctrl + A', action: 'Select the current table', cat: 'Navigation', why: 'Once selects the table, twice selects the whole sheet.' },
+    { mac: 'fn + ⌃ + ←', win: 'Ctrl + Home', action: 'Go to cell A1', cat: 'Navigation', why: 'Leave every sheet at A1 before saving — the mark of a tidy file.' },
+    { mac: '⌃ + Page Down', win: 'Ctrl + Page Down', action: 'Move to the next worksheet', cat: 'Navigation', why: 'In a fifteen-tab model the mouse is pure waste.' },
 
-    { mac: '⌘ + T', win: 'F4', action: 'Переключить абсолютную/относительную ссылку ($)', cat: 'Формулы', why: 'Расставляет доллары в ссылке. Самое частое сочетание при написании формул: на Mac это ⌘T, а не F4.' },
-    { mac: '⌘ + D', win: 'Ctrl + D', action: 'Заполнить вниз (скопировать формулу из верхней ячейки)', cat: 'Формулы', why: 'Протянуть формулу на 5000 строк за одно нажатие.' },
-    { mac: '⌘ + R', win: 'Ctrl + R', action: 'Заполнить вправо', cat: 'Формулы', why: 'Растянуть модель по годам или месяцам.' },
-    { mac: '⌃ + U', win: 'F2', action: 'Войти в режим редактирования ячейки', cat: 'Формулы', why: 'Проверить формулу и увидеть подсветку её диапазонов.' },
-    { mac: '⌘ + ⇧ + T', win: 'Alt + =', action: 'Автосумма', cat: 'Формулы', why: 'Итог под столбцом за секунду.' },
-    { mac: '⌃ + `', win: 'Ctrl + `', action: 'Показать формулы вместо значений', cat: 'Формулы', why: 'Первым делом при проверке чужого файла: видно все зашитые числа.' },
-    { mac: '⌘ + =', win: 'F9', action: 'Пересчитать книгу', cat: 'Формулы', why: 'Когда расчёт переведён в ручной режим на тяжёлой модели.' },
-    { mac: '⇧ + F3', win: 'Shift + F3', action: 'Вставить функцию (мастер функций)', cat: 'Формулы', why: 'Подсказка по аргументам, когда забыли порядок в СУММЕСЛИМН.' },
-    { mac: '⌃ + ⇧ + Return', win: 'Ctrl + Shift + Enter', action: 'Ввести формулу массива', cat: 'Формулы', why: 'В старых версиях без этого не работают массивные вычисления.' },
+    { mac: '⌘ + T', win: 'F4', action: 'Toggle absolute / relative reference ($)', cat: 'Formulas', why: 'Puts the dollars in. The most-used key while writing formulas — on a Mac it is ⌘T, not F4.' },
+    { mac: '⌘ + D', win: 'Ctrl + D', action: 'Fill down — copy the formula from the cell above', cat: 'Formulas', why: 'Pulls a formula down five thousand rows in one keystroke.' },
+    { mac: '⌘ + R', win: 'Ctrl + R', action: 'Fill right', cat: 'Formulas', why: 'Stretches a model across months or years.' },
+    { mac: '⌃ + U', win: 'F2', action: 'Edit the cell in place', cat: 'Formulas', why: 'Check a formula and see its ranges highlighted.' },
+    { mac: '⌘ + ⇧ + T', win: 'Alt + =', action: 'AutoSum', cat: 'Formulas', why: 'A total under a column in one second.' },
+    { mac: '⌃ + `', win: 'Ctrl + `', action: 'Show formulas instead of values', cat: 'Formulas', why: 'First thing to do with somebody else\'s file: every hard-coded number becomes visible.' },
+    { mac: '⌘ + =', win: 'F9', action: 'Recalculate the workbook', cat: 'Formulas', why: 'For heavy models switched to manual calculation.' },
+    { mac: '⇧ + F3', win: 'Shift + F3', action: 'Insert function (the function wizard)', cat: 'Formulas', why: 'Argument prompts, for when you forget the order inside SUMIFS.' },
+    { mac: '⌃ + ⇧ + Return', win: 'Ctrl + Shift + Enter', action: 'Enter an array formula', cat: 'Formulas', why: 'Older versions need this for array calculations.' },
 
-    { mac: '⌘ + 1', win: 'Ctrl + 1', action: 'Открыть окно «Формат ячеек»', cat: 'Формат', why: 'Единственный способ настроить пользовательский формат числа.' },
-    { mac: '⌃ + ⇧ + %', win: 'Ctrl + Shift + %', action: 'Процентный формат', cat: 'Формат', why: 'Доли на слайде всегда в процентах, а не в 0,1234.' },
-    { mac: '⌃ + ⇧ + !', win: 'Ctrl + Shift + !', action: 'Числовой формат с разделителем тысяч', cat: 'Формат', why: 'Числа без разделителей на слайде не читаются.' },
-    { mac: '⌃ + ⇧ + $', win: 'Ctrl + Shift + $', action: 'Денежный формат', cat: 'Формат', why: 'Единый формат по всей модели.' },
-    { mac: '⌘ + B', win: 'Ctrl + B', action: 'Полужирный шрифт', cat: 'Формат', why: 'Выделение итоговых строк.' },
-    { mac: '⌘ + ⌥ + 0', win: 'Ctrl + Shift + 7', action: 'Добавить внешнюю границу', cat: 'Формат', why: 'Оформление блока допущений.' },
+    { mac: '⌘ + 1', win: 'Ctrl + 1', action: 'Open the Format Cells dialog', cat: 'Formatting', why: 'The only way to build a custom number format.' },
+    { mac: '⌃ + ⇧ + %', win: 'Ctrl + Shift + %', action: 'Percentage format', cat: 'Formatting', why: 'Shares on a slide are percentages, never 0.1234.' },
+    { mac: '⌃ + ⇧ + !', win: 'Ctrl + Shift + !', action: 'Number format with thousands separators', cat: 'Formatting', why: 'Numbers without separators are unreadable on a slide.' },
+    { mac: '⌃ + ⇧ + $', win: 'Ctrl + Shift + $', action: 'Currency format', cat: 'Formatting', why: 'One consistent format across the model.' },
+    { mac: '⌘ + B', win: 'Ctrl + B', action: 'Bold', cat: 'Formatting', why: 'Marks the total rows.' },
+    { mac: '⌘ + ⌥ + 0', win: 'Ctrl + Shift + 7', action: 'Add an outline border', cat: 'Formatting', why: 'Boxes off the assumptions block.' },
 
-    { mac: '⌘ + C', win: 'Ctrl + C', action: 'Копировать', cat: 'Правка', why: '' },
-    { mac: '⌃ + ⌘ + V', win: 'Ctrl + Alt + V', action: 'Специальная вставка (значения, форматы, транспонировать)', cat: 'Правка', why: 'Вставить только значения — обязательный шаг перед отправкой файла клиенту.' },
-    { mac: '⌘ + Z', win: 'Ctrl + Z', action: 'Отменить действие', cat: 'Правка', why: '' },
-    { mac: '⌘ + Y', win: 'Ctrl + Y', action: 'Повторить последнее действие', cat: 'Правка', why: 'Вставить 10 строк — нажать один раз и повторить девять.' },
-    { mac: '⌃ + ⇧ + =', win: 'Ctrl + Shift + +', action: 'Вставить ячейки/строки/столбцы', cat: 'Правка', why: '' },
-    { mac: '⌘ + −', win: 'Ctrl + −', action: 'Удалить ячейки/строки/столбцы', cat: 'Правка', why: '' },
-    { mac: '⌘ + F', win: 'Ctrl + F', action: 'Найти', cat: 'Правка', why: 'Поиск зашитых чисел и внешних ссылок в чужой модели.' },
-    { mac: '⌃ + ⌘ + F', win: 'Ctrl + H', action: 'Найти и заменить', cat: 'Правка', why: 'Массовая чистка выгрузки.' },
+    { mac: '⌘ + C', win: 'Ctrl + C', action: 'Copy', cat: 'Editing', why: '' },
+    { mac: '⌃ + ⌘ + V', win: 'Ctrl + Alt + V', action: 'Paste special — values, formats, transpose', cat: 'Editing', why: 'Pasting values only is a compulsory step before a file goes to a client.' },
+    { mac: '⌘ + Z', win: 'Ctrl + Z', action: 'Undo', cat: 'Editing', why: '' },
+    { mac: '⌘ + Y', win: 'Ctrl + Y', action: 'Repeat the last action', cat: 'Editing', why: 'Insert one row, then repeat it nine times.' },
+    { mac: '⌃ + ⇧ + =', win: 'Ctrl + Shift + +', action: 'Insert cells, rows or columns', cat: 'Editing', why: '' },
+    { mac: '⌘ + −', win: 'Ctrl + −', action: 'Delete cells, rows or columns', cat: 'Editing', why: '' },
+    { mac: '⌘ + F', win: 'Ctrl + F', action: 'Find', cat: 'Editing', why: 'Hunt for hard-coded numbers and external links in somebody else\'s model.' },
+    { mac: '⌃ + ⌘ + F', win: 'Ctrl + H', action: 'Find and replace', cat: 'Editing', why: 'Bulk clean-up of an export.' },
 
-    { mac: '⌘ + ⇧ + F', win: 'Ctrl + Shift + L', action: 'Включить/выключить автофильтр', cat: 'Данные', why: 'Первое действие с любой новой таблицей.' },
-    { mac: '⌥ + ↓', win: 'Alt + ↓', action: 'Раскрыть выпадающий список фильтра', cat: 'Данные', why: 'Фильтрация без мыши.' },
-    { mac: '⌘ + ⇧ + O', win: 'Ctrl + G → Выделить', action: 'Выделить ячейки с примечаниями', cat: 'Данные', why: 'Быстрая ревизия комментариев в модели.' },
-    { mac: '⌃ + ⇧ + [', win: 'Ctrl + [', action: 'Перейти к ячейкам-предшественникам формулы', cat: 'Аудит', why: 'Разбор чужой модели: откуда взялась цифра.' },
-    { mac: '⌘ + P', win: 'Ctrl + P', action: 'Печать / предпросмотр', cat: 'Прочее', why: 'Проверить, что таблица влезает на страницу.' },
-    { mac: '⌘ + S', win: 'Ctrl + S', action: 'Сохранить', cat: 'Прочее', why: 'Каждые пять минут. Без исключений.' }
+    { mac: '⌘ + ⇧ + F', win: 'Ctrl + Shift + L', action: 'Turn the autofilter on or off', cat: 'Data', why: 'The first thing you do to any new table.' },
+    { mac: '⌥ + ↓', win: 'Alt + ↓', action: 'Open the filter dropdown', cat: 'Data', why: 'Filtering without the mouse.' },
+    { mac: '⌘ + ⇧ + O', win: 'Ctrl + G → Special', action: 'Select the cells that carry comments', cat: 'Data', why: 'Quick audit of the notes left in a model.' },
+    { mac: '⌃ + ⇧ + [', win: 'Ctrl + [', action: 'Trace the precedents of a formula', cat: 'Audit', why: 'Unpicking someone else\'s model: where did this number come from?' },
+    { mac: '⌘ + P', win: 'Ctrl + P', action: 'Print and print preview', cat: 'Other', why: 'Check the table fits on the page.' },
+    { mac: '⌘ + S', win: 'Ctrl + S', action: 'Save', cat: 'Other', why: 'Every five minutes. No exceptions.' }
   ];
 
-  /* Блиц: «какой функцией решается задача» */
+  /* Rapid fire: which function solves this */
   var FUNCTION_QUIZ = [
-    { q: 'Сложить выручку только по сделкам из Москвы', options: ['СУММЕСЛИ', 'СУММ', 'СЧЁТЕСЛИ', 'ВПР'], answer: 0, why: 'СУММЕСЛИ(диапазон_условия; условие; диапазон_суммирования).' },
-    { q: 'Сложить выручку по Москве И только по выигранным сделкам', options: ['СУММЕСЛИМН', 'СУММЕСЛИ', 'СУММПРОИЗВ', 'ПРОМЕЖУТОЧНЫЕ.ИТОГИ'], answer: 0, why: 'Два и более условия — только СУММЕСЛИМН, и диапазон суммирования идёт первым.' },
-    { q: 'Подтянуть цену из справочника по коду товара', options: ['ВПР', 'СУММЕСЛИ', 'ПОИСКПОЗ', 'СЦЕПИТЬ'], answer: 0, why: 'ВПР(код; таблица; номер столбца; 0). Не забудьте 0 в конце.' },
-    { q: 'Найти значение, если ключ находится ПРАВЕЕ искомого столбца', options: ['ИНДЕКС + ПОИСКПОЗ', 'ВПР', 'ГПР', 'СМЕЩ'], answer: 0, why: 'ВПР умеет искать только вправо от ключа. ИНДЕКС+ПОИСКПОЗ работает в любую сторону.' },
-    { q: 'Узнать, в какой строке списка находится значение', options: ['ПОИСКПОЗ', 'ИНДЕКС', 'СЧЁТЕСЛИ', 'НАЙТИ'], answer: 0, why: 'ПОИСКПОЗ возвращает позицию, ИНДЕКС — значение по позиции.' },
-    { q: 'Посчитать количество сделок дороже 1 млн', options: ['СЧЁТЕСЛИ', 'СЧЁТ', 'СЧЁТЗ', 'СУММ'], answer: 0, why: 'СЧЁТЕСЛИ(диапазон;">1000000"). Условие с оператором — в кавычках.' },
-    { q: 'Убрать двойные пробелы из выгрузки', options: ['СЖПРОБЕЛЫ', 'ПОДСТАВИТЬ', 'ПЕЧСИМВ', 'СЦЕП'], answer: 0, why: 'СЖПРОБЕЛЫ убирает лишние пробелы, оставляя по одному между словами.' },
-    { q: 'Превратить текст «1 250 ₽» в число', options: ['ЗНАЧЕН + ПОДСТАВИТЬ', 'ТЕКСТ', 'ОКРУГЛ', 'ЛЕВСИМВ'], answer: 0, why: 'Сначала ПОДСТАВИТЬ убирает мусор, потом ЗНАЧЕН превращает в число.' },
-    { q: 'Достать номер месяца из даты', options: ['МЕСЯЦ', 'ТЕКСТ', 'ДЕНЬНЕД', 'ДАТА'], answer: 0, why: 'МЕСЯЦ(дата) возвращает число от 1 до 12.' },
-    { q: 'Получить последний день месяца через 3 месяца', options: ['КОНМЕСЯЦА', 'ДАТАМЕС', 'ДАТА', 'СЕГОДНЯ'], answer: 0, why: 'КОНМЕСЯЦА(дата;3). ДАТАМЕС вернёт тот же день, а не конец месяца.' },
-    { q: 'Спрятать ошибку #ДЕЛ/0! и показать 0', options: ['ЕСЛИОШИБКА', 'ЕСЛИ', 'ЕОШИБКА', 'ЕСНД'], answer: 0, why: 'ЕСЛИОШИБКА(формула;0) — но сначала поймите причину ошибки.' },
-    { q: 'Посчитать NPV проекта с вложением в год 0', options: ['B0 + ЧПС(ставка; потоки 1..n)', 'ЧПС(ставка; все потоки)', 'ВСД(потоки)', 'ПС(ставка; n; поток)'], answer: 0, why: 'ЧПС дисконтирует первый переданный поток уже на один период, поэтому год 0 прибавляется отдельно.' },
-    { q: 'Найти ставку, при которой NPV = 0', options: ['ВСД', 'ЧПС', 'СТАВКА', 'ПЛТ'], answer: 0, why: 'ВСД (IRR) — внутренняя норма доходности.' },
-    { q: 'Посчитать ежемесячный платёж по кредиту', options: ['ПЛТ', 'ПС', 'БС', 'КПЕР'], answer: 0, why: 'ПЛТ(годовая_ставка/12; годы*12; сумма).' },
-    { q: 'Сложить произведение двух столбцов (цена × объём)', options: ['СУММПРОИЗВ', 'СУММ', 'ПРОИЗВЕД', 'СУММЕСЛИ'], answer: 0, why: 'СУММПРОИЗВ(цены;объёмы) — одна формула вместо вспомогательного столбца.' },
-    { q: 'Взять третье по величине значение в диапазоне', options: ['НАИБОЛЬШИЙ', 'МАКС', 'РАНГ', 'ПЕРСЕНТИЛЬ.ВКЛ'], answer: 0, why: 'НАИБОЛЬШИЙ(диапазон;3).' },
-    { q: 'Округлить до целого числа машин всегда вверх', options: ['ОКРУГЛВВЕРХ', 'ОКРУГЛ', 'ЦЕЛОЕ', 'ОТБР'], answer: 0, why: 'ОКРУГЛВВЕРХ(x;0). Обычный ОКРУГЛ округлит 3,2 до 3 — и одна партия не уедет.' },
-    { q: 'Собрать ключ из двух столбцов для поиска', options: ['A2 & "|" & B2', 'СУММ(A2;B2)', 'СЦЕПИТЬ без разделителя', 'ТЕКСТ(A2;B2)'], answer: 0, why: 'Разделитель обязателен: иначе «АБ»+«В» и «А»+«БВ» дадут один и тот же ключ.' },
-    { q: 'Посчитать выручку сделок с маржой выше средней', options: ['СУММПРОИЗВ с условием', 'СУММЕСЛИ со средним', 'СРЗНАЧЕСЛИ', 'СУММ'], answer: 0, why: 'Критерий, который сам является вычислением, СУММЕСЛИМН не переварит — нужен СУММПРОИЗВ.' },
-    { q: 'Определить, сколько полных лет между двумя датами', options: ['РАЗНДАТ с "y"', 'ГОД(б)-ГОД(а)', 'ДНИ/365', 'ДОЛЯГОДА'], answer: 0, why: 'ГОД(б)−ГОД(а) ошибается, если день рождения ещё не наступил.' }
+    { q: 'Add up revenue for deals from Moscow only', options: ['SUMIF', 'SUM', 'COUNTIF', 'VLOOKUP'], answer: 0, why: 'SUMIF(range to test, criterion, range to add).' },
+    { q: 'Add up revenue for Moscow AND won deals only', options: ['SUMIFS', 'SUMIF', 'SUMPRODUCT', 'SUBTOTAL'], answer: 0, why: 'Two or more conditions means SUMIFS — and its range to add comes first.' },
+    { q: 'Pull a price out of a reference table by product code', options: ['VLOOKUP', 'SUMIF', 'MATCH', 'CONCAT'], answer: 0, why: 'VLOOKUP(code, table, column number, 0). Never forget the final 0.' },
+    { q: 'Return a value when the key sits to the RIGHT of what you need', options: ['INDEX + MATCH', 'VLOOKUP', 'HLOOKUP', 'OFFSET'], answer: 0, why: 'VLOOKUP only looks right of the key. INDEX+MATCH works in any direction.' },
+    { q: 'Find which row of a list a value sits in', options: ['MATCH', 'INDEX', 'COUNTIF', 'FIND'], answer: 0, why: 'MATCH returns a position; INDEX returns the value at a position.' },
+    { q: 'Count the deals above one million', options: ['COUNTIF', 'COUNT', 'COUNTA', 'SUM'], answer: 0, why: 'COUNTIF(range, ">1000000"). A criterion with an operator goes in quotes.' },
+    { q: 'Total only the rows left visible by a filter', options: ['SUBTOTAL', 'SUM', 'SUMIF', 'AGGREGATE'], answer: 0, why: 'SUBTOTAL(9, range). A plain SUM includes the rows the filter is hiding.' },
+    { q: 'Strip the double spaces out of an export', options: ['TRIM', 'SUBSTITUTE', 'CLEAN', 'CONCAT'], answer: 0, why: 'TRIM removes leading, trailing and repeated spaces, leaving single ones between words.' },
+    { q: 'Turn the text "1 250 USD" into a number', options: ['VALUE + SUBSTITUTE', 'TEXT', 'ROUND', 'LEFT'], answer: 0, why: 'SUBSTITUTE strips the rubbish first, then VALUE makes it a number.' },
+    { q: 'Get the month number out of a date', options: ['MONTH', 'TEXT', 'WEEKDAY', 'DATE'], answer: 0, why: 'MONTH(date) returns 1 to 12.' },
+    { q: 'Get the last day of the month three months out', options: ['EOMONTH', 'EDATE', 'DATE', 'TODAY'], answer: 0, why: 'EOMONTH(date, 3). EDATE would give the same day number, not the month end.' },
+    { q: 'Hide a #DIV/0! and show 0 instead', options: ['IFERROR', 'IF', 'ISERROR', 'IFNA'], answer: 0, why: 'IFERROR(formula, 0) — but understand the error before you hide it.' },
+    { q: 'NPV of a project with an investment in year 0', options: ['B0 + NPV(rate, flows 1..n)', 'NPV(rate, all flows)', 'IRR(flows)', 'PV(rate, n, flow)'], answer: 0, why: 'NPV discounts the first value you give it by a full period, so year 0 is added separately.' },
+    { q: 'The rate at which NPV comes out to zero', options: ['IRR', 'NPV', 'RATE', 'PMT'], answer: 0, why: 'IRR — the internal rate of return.' },
+    { q: 'The monthly payment on a loan', options: ['PMT', 'PV', 'FV', 'NPER'], answer: 0, why: 'PMT(annual rate/12, years*12, amount).' },
+    { q: 'Add up price × volume across two columns', options: ['SUMPRODUCT', 'SUM', 'PRODUCT', 'SUMIF'], answer: 0, why: 'SUMPRODUCT(prices, volumes) — one formula instead of a helper column.' },
+    { q: 'Take the third largest value in a range', options: ['LARGE', 'MAX', 'RANK', 'PERCENTILE.INC'], answer: 0, why: 'LARGE(range, 3).' },
+    { q: 'Round a number of trucks so none is left behind', options: ['ROUNDUP', 'ROUND', 'INT', 'TRUNC'], answer: 0, why: 'ROUNDUP(x, 0). Plain ROUND turns 3.2 into 3 and leaves a load on the dock.' },
+    { q: 'Build a key out of two columns for a lookup', options: ['A2 & "|" & B2', 'SUM(A2, B2)', 'CONCAT with no separator', 'TEXT(A2, B2)'], answer: 0, why: 'The separator is essential, otherwise different pairs can produce identical keys.' },
+    { q: 'Revenue of deals whose margin beats the average margin', options: ['SUMPRODUCT with a condition', 'SUMIF against the average', 'AVERAGEIF', 'SUM'], answer: 0, why: 'A criterion that is itself a calculation cannot go into SUMIFS — that is SUMPRODUCT territory.' },
+    { q: 'Whole years between two dates', options: ['DATEDIF with "y"', 'YEAR(b)-YEAR(a)', 'DAYS/365', 'YEARFRAC'], answer: 0, why: 'YEAR(b)−YEAR(a) is wrong whenever the anniversary has not happened yet this year.' },
+    { q: 'Group revenue by region and product in fifteen seconds', options: ['A pivot table', 'Twenty-five SUMIFS', 'Sorting and reading it off', 'A chart'], answer: 0, why: 'Region to Rows, Product to Columns, Revenue to Values. This is exactly what the test means by "pivot tables".' },
+    { q: 'In a pivot, which area scopes the WHOLE report', options: ['Filters', 'Rows', 'Columns', 'Values'], answer: 0, why: 'A field in Filters decides which records the pivot may see at all.' },
+    { q: 'A pivot shows Count where you expected Sum. Why?', options: ['The column contains text', 'The pivot is broken', 'The filter is on', 'The data is unsorted'], answer: 0, why: 'Excel defaults to Count when the field is not purely numeric — treat it as a data quality warning.' },
+    { q: 'Show each region as a share of total revenue in a pivot', options: ['Show values as % of grand total', 'A column of divisions beside it', 'Percentage number format', 'A calculated field'], answer: 0, why: 'One dropdown, and the shares are guaranteed to add to 100%.' },
+    { q: 'Gross profit is not a column in the data. In a pivot you', options: ['add a calculated field', 'sort by margin', 'add a report filter', 'change the aggregation'], answer: 0, why: 'A calculated field is a formula over field names, evaluated for every group.' },
+    { q: 'Sorting a single column while leaving the rest alone', options: ['destroys the data', 'is the correct way to sort', 'is faster', 'keeps the records intact'], answer: 0, why: 'Rows must move together. Always sort the table, never one selected column.' }
   ];
 
-  /* Ошибки Excel — что означают */
+  /* Excel errors and what they mean */
   var ERROR_QUIZ = [
-    { q: '#Н/Д', options: ['Искомое значение не найдено', 'Деление на ноль', 'Неверный тип аргумента', 'Ссылка на удалённую ячейку'], answer: 0, why: 'Чаще всего виноваты лишние пробелы или число, записанное текстом.' },
-    { q: '#ДЕЛ/0!', options: ['Деление на ноль или на пустую ячейку', 'Значение не найдено', 'Неизвестное имя функции', 'Циклическая ссылка'], answer: 0, why: 'Оберните в ЕСЛИОШИБКА только после того, как поняли причину.' },
-    { q: '#ЗНАЧ!', options: ['Неверный тип аргумента: текст там, где ждали число', 'Значение не найдено', 'Ссылка потеряна', 'Число слишком велико'], answer: 0, why: 'Классика: суммирование столбца, где числа записаны текстом.' },
-    { q: '#ССЫЛКА!', options: ['Формула ссылается на удалённую ячейку', 'Опечатка в имени функции', 'Деление на ноль', 'Слишком много аргументов'], answer: 0, why: 'Появляется после удаления строк или столбцов — самая опасная ошибка в чужой модели.' },
-    { q: '#ИМЯ?', options: ['Опечатка в имени функции или неизвестное имя', 'Значение не найдено', 'Неверный тип данных', 'Ошибка в числе'], answer: 0, why: 'Проверьте раскладку клавиатуры и язык функций.' },
-    { q: '#ЧИСЛО!', options: ['Некорректный результат вычисления (корень из отрицательного, нет решения)', 'Текст вместо числа', 'Ссылка удалена', 'Значение не найдено'], answer: 0, why: 'Часто возникает у ВСД, когда потоки не меняют знак.' }
+    { q: '#N/A', options: ['The value being looked up was not found', 'Division by zero', 'Wrong type of argument', 'Reference to a deleted cell'], answer: 0, why: 'Usually a trailing space or a number stored as text rather than a genuinely missing key.' },
+    { q: '#DIV/0!', options: ['Division by zero or by an empty cell', 'Value not found', 'Unknown function name', 'Circular reference'], answer: 0, why: 'Wrap it in IFERROR only after you understand why it happened.' },
+    { q: '#VALUE!', options: ['Wrong type of argument — text where a number was expected', 'Value not found', 'Lost reference', 'Number too large'], answer: 0, why: 'Classic cause: summing a column where the numbers are stored as text.' },
+    { q: '#REF!', options: ['The formula points at a cell that was deleted', 'Typo in a function name', 'Division by zero', 'Too many arguments'], answer: 0, why: 'Appears after rows or columns are deleted — the most dangerous error in somebody else’s model.' },
+    { q: '#NAME?', options: ['Typo in a function name, or an unknown name', 'Value not found', 'Wrong data type', 'Numeric error'], answer: 0, why: 'Check the spelling, and check the keyboard language.' },
+    { q: '#NUM!', options: ['The calculation has no valid result — square root of a negative, no solution', 'Text instead of a number', 'Deleted reference', 'Value not found'], answer: 0, why: 'Common with IRR when the cash flows never change sign.' }
   ];
 
-  /* --------------------------------------------------- генератор вопросов */
+  /* ------------------------------------------------- question generator */
   function shuffle(arr, rnd) {
     var a = arr.slice(), i, j, t;
     for (i = a.length - 1; i > 0; i--) {
@@ -107,14 +114,14 @@
       if (dir === 'whatDoes') {
         var opts = shuffle([s].concat(wrong));
         return {
-          kind: 'shortcut', prompt: 'Что делает это сочетание?',
+          kind: 'shortcut', prompt: 'What does this shortcut do?',
           keys: s[key], options: opts.map(function (o) { return o.action; }),
           answer: opts.indexOf(s), why: s.why, item: s
         };
       }
       var opts2 = shuffle([s].concat(wrong));
       return {
-        kind: 'shortcut', prompt: 'Каким сочетанием: «' + s.action + '»?',
+        kind: 'shortcut', prompt: 'Which shortcut does this: ' + s.action + '?',
         options: opts2.map(function (o) { return o[key]; }),
         answer: opts2.indexOf(s), why: s.why, item: s
       };
