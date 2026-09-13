@@ -200,7 +200,7 @@ npm test           # runs everything
 |---|---|
 | `tests/formula.test.js` | 122 checks on the engine, every expected value verified against Excel's behaviour |
 | `tests/curriculum.test.js` | 3,466 checks: every task's reference answer solves it, raises no Excel error, and an untouched sheet fails; every address named in a task exists; every task has an explanation; the mock test matches the published 20-question / 60-minute format |
-| `tests/ui.test.js` | 62 checks in a real Chromium: typing formulas, `⌘D`, `⌘T`, `⌘Z`, sorting, filtering with `SUBTOTAL`, building and marking pivot tables, the explanation panel, the timed mock test, and all 83 tasks opening cleanly |
+| `tests/ui.test.js` | 65 checks in a real Chromium: typing formulas, `⌘D`, `⌘T`, `⌘Z`, sorting, filtering with `SUBTOTAL`, building and marking pivot tables, the explanation panel, the timed mock test, the guarantee that a failed retry never lowers a score, and all 83 tasks opening cleanly |
 
 ### Layout
 

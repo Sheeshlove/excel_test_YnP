@@ -93,6 +93,34 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' 
   check(anatomy.includes('=B2-C2'), 'the explanation takes the learner\'s own formula apart');
   check((await page.locator('.ex-step').count()) >= 2, 'the formula is broken into steps with values');
 
+  /* ---------- a wrong attempt after a correct one cannot lower the score ---- */
+  const xpSolved = Number(await page.locator('#xp-value').textContent());
+  await page.locator('#btn-reset').click();
+  await page.locator('td[data-r="1"][data-c="3"]').click();
+  await page.keyboard.type('999');
+  await page.keyboard.press('Enter');
+  await page.locator('#btn-check').click();
+  await page.waitForSelector('.result.bad');
+  check(Number(await page.locator('#xp-value').textContent()) === xpSolved,
+    'a wrong attempt after a correct one does not reduce XP');
+  check(await page.evaluate(() => window.XLStore.task('1.1').best) === 1,
+    'the best attempt at a task is kept even after a later failure');
+  await page.goto(base + '#/level/1');
+  await page.waitForFunction(() => location.hash === '#/level/1');
+  check((await page.locator('.task-status.done').count()) >= 1,
+    'the task is still shown as solved after a failed retry');
+  await page.goto(base + '#/1/1.1');
+  await page.waitForFunction(() => location.hash === '#/1/1.1');
+  await page.waitForSelector('table.sheet');
+  await page.locator('td[data-r="1"][data-c="3"]').click();
+  await page.keyboard.type('=B2-C2');
+  await page.keyboard.press('Enter');
+  await page.locator('td[data-r="1"][data-c="3"]').click();
+  await page.keyboard.down('Shift');
+  for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowDown');
+  await page.keyboard.up('Shift');
+  await page.keyboard.press('Meta+d');
+
   /* ---------- ⌘Z ---------- */
   await page.locator('td[data-r="3"][data-c="3"]').click();
   await page.keyboard.press('Meta+z');
