@@ -32,7 +32,12 @@ notifications, Shortcuts, files in iCloud Drive).
 
 1. Open `https://github.com/Sheeshlove/excel_test_YnP/settings/pages`
 2. **Build and deployment → Source** → choose **GitHub Actions**
-3. That is it. There is nothing to configure.
+3. That is it. There is nothing else to configure.
+
+This single click cannot be automated: a workflow token is not allowed to create
+the Pages site, and trying it fails with *"Resource not accessible by
+integration"*. Until you do it, the deploy workflow stops on the
+`configure-pages` step and says exactly that.
 
 The repository is public, so Pages is free. (On a private repository Pages needs
 a paid plan — either make the repo public, or use Cloudflare Pages or Netlify,
