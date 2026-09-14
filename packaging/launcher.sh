@@ -10,7 +10,8 @@ mkdir -p "$PROFILE"
 
 alert() { osascript -e "display alert \"Excel Trainer\" message \"$1\"" >/dev/null 2>&1; }
 
-# --- 1. Local server, so the browser will let the page save progress --------
+# --- 1. Local server: it holds the progress file and gives the page a stable
+#        address, so what you did last time is still there next time -------
 PY=""
 for cand in /usr/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3; do
   [ -x "$cand" ] && PY="$cand" && break
@@ -21,7 +22,7 @@ PORT=""
 SRV=""
 if [ -n "$PY" ]; then
   PORTFILE="$(mktemp -t exceltrainer)"
-  "$PY" "$RES/server.py" "$APPDIR" > "$PORTFILE" 2>/dev/null &
+  "$PY" "$RES/server.py" "$APPDIR" --profile "$PROFILE" > "$PORTFILE" 2>/dev/null &
   SRV=$!
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     PORT="$(head -n 1 "$PORTFILE" 2>/dev/null | tr -dc '0-9')"
@@ -61,8 +62,8 @@ done
 # --- 4. Fallback: the default browser ---------------------------------------
 open "$URL"
 if [ -z "$PORT" ]; then
-  MSG="Excel Trainer has opened in your default browser.\n\nPython 3 was not found, so the page was opened as a file. Safari does not save progress in that mode - use Chrome, or install the Xcode Command Line Tools (xcode-select --install).\n\nLeave this window open while you work."
+  MSG="Excel Trainer has opened in your default browser.\n\nPython 3 was not found, so the page was opened as a file and progress can only be kept by the browser itself - Chrome does that, Safari does not. For progress saved to a file instead, install the Xcode Command Line Tools (xcode-select --install) and rebuild the app.\n\nLeave this window open while you work."
 else
-  MSG="Excel Trainer has opened in your default browser.\n\nLeave this window open while you work - it is holding the local server."
+  MSG="Excel Trainer has opened in your default browser.\n\nLeave this window open while you work - it is holding the local server, which is what saves your progress to:\n$PROFILE/progress.json"
 fi
 osascript -e "display dialog \"$MSG\" buttons {\"Quit\"} default button 1 with title \"Excel Trainer\"" >/dev/null 2>&1

@@ -103,8 +103,6 @@ main { flex: 1; }
 .levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
 .level-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: transform .12s, box-shadow .12s; }
 .level-card:hover { transform: translateY(-2px); box-shadow: 0 4px 24px rgba(16,32,56,.12); }
-.level-card.locked { opacity: .62; cursor: not-allowed; }
-.level-card.locked:hover { transform: none; box-shadow: var(--shadow); }
 .level-card.done { border-color: #bfe3d3; }
 .level-top { display: flex; align-items: flex-start; gap: 12px; }
 .level-num {
@@ -113,7 +111,6 @@ main { flex: 1; }
   background: var(--accent-soft); color: var(--accent);
 }
 .level-card.done .level-num { background: var(--ok-soft); color: var(--ok); }
-.level-card.locked .level-num { background: #eef1f6; color: var(--muted); }
 .level-card.exam .level-num { background: #fdf3e2; color: var(--gold); }
 .level-title { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
 .level-sub { color: var(--muted); font-size: 12.5px; }
@@ -128,6 +125,9 @@ main { flex: 1; }
 
 /* ------------------------------------------------------------ level page */
 .level-layout { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+/* grid children default to min-width:auto, which lets a long task brief push the
+   whole page wider than its own column. */
+.level-layout > * { min-width: 0; }
 .theory { padding: 18px 20px; }
 .theory h3 { margin: 0 0 12px; font-size: 15px; }
 .theory-item { padding: 11px 0; border-top: 1px solid var(--line); }
@@ -420,6 +420,23 @@ tr.pt-grand td, tr.pt-grand th { background: #eef2f8; font-weight: 700; }
 .es-arg i { color: var(--muted); font-style: normal; font-size: 11.5px; }
 
 /* exam navigation */
+/* the fifty mock papers */
+.paper-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 6px; }
+.paper-chip {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 6px 4px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); cursor: pointer; font: inherit; color: inherit;
+  transition: border-color .12s, background .12s;
+}
+.paper-chip:hover { border-color: var(--accent); }
+.paper-chip b { font-size: 13px; font-weight: 600; }
+.paper-chip span { font-size: 10.5px; color: var(--muted); }
+.paper-chip.tried { background: #fdf6e8; border-color: #ecd9ae; }
+.paper-chip.passed { background: var(--ok-soft); border-color: #bfe3d3; }
+.paper-chip.passed span { color: var(--ok); }
+.paper-chip.current { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.paper-chip.current b { color: var(--accent); }
+
 .exam-nav { display: flex; flex-wrap: wrap; gap: 5px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); }
 .exam-chip { padding: 4px 9px; font-size: 12px; }
 .exam-chip.filled { background: var(--ok-soft); border-color: #bfe3d3; }

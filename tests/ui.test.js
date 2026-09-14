@@ -10,16 +10,32 @@ const ROOT = path.join(__dirname, '..', 'app');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
 function serve() {
+  // the trainer saves through /api/progress, exactly as it does against
+  // packaging/server.py, so the real saving path is what gets exercised here
+  let stored = null;
   return new Promise(res => {
     const srv = http.createServer((req, rq) => {
       let p = decodeURIComponent(req.url.split('?')[0]);
+      if (p === '/api/progress') {
+        if (req.method === 'GET') {
+          rq.writeHead(200, { 'Content-Type': 'application/json' });
+          return rq.end(JSON.stringify({ ok: true, data: stored, path: '(in the test)' }));
+        }
+        let body = '';
+        req.on('data', c => { body += c; });
+        return req.on('end', () => {
+          try { stored = JSON.parse(body); } catch (e) { /* leave the last good one */ }
+          rq.writeHead(200, { 'Content-Type': 'application/json' });
+          rq.end(JSON.stringify({ ok: true }));
+        });
+      }
       if (p === '/') p = '/index.html';
       const file = path.join(ROOT, p);
       if (!file.startsWith(ROOT) || !fs.existsSync(file)) { rq.writeHead(404); return rq.end('no'); }
       rq.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
       rq.end(fs.readFileSync(file));
     });
-    srv.listen(0, '127.0.0.1', () => res({ srv, port: srv.address().port }));
+    srv.listen(0, '127.0.0.1', () => res({ srv, port: srv.address().port, saved: () => stored }));
   });
 }
 
@@ -27,7 +43,7 @@ let pass = 0, fail = 0;
 function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' + msg); } }
 
 (async () => {
-  const { srv, port } = await serve();
+  const { srv, port, saved } = await serve();
   const browser = await chromium.launch({ executablePath: process.env.CHROME_BIN || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
@@ -41,10 +57,30 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' 
 
   /* ---------- home ---------- */
   check((await page.locator('.level-card').count()) === 12, 'the home screen shows 12 levels');
-  check(await page.locator('.level-card.locked').count() > 0, 'later levels start locked');
+  check(await page.locator('.level-card.locked').count() === 0, 'no level starts locked');
+  check(await page.locator('.level-card[data-level]').count() === 12, 'every level is open from the start');
+  check((await page.locator('.notice').innerText()).includes('open from the start'),
+    'the home screen says everything is open from the start');
   check((await page.locator('.notice').innerText()).includes('Nothing here can be lost'),
     'the home screen states that progress cannot be lost');
   check(!/[А-Яа-яЁё]/.test(await page.locator('body').innerText()), 'the interface is entirely in English');
+
+  /* ---------- the mock tests are open before anything is solved ---------- */
+  await page.locator('.level-card[data-level="12"]').click();
+  await page.waitForSelector('.paper-grid');
+  check((await page.locator('.paper-chip').count()) === 50, 'all 50 mock papers are offered');
+  check((await page.locator('.task-row').count()) === 20, 'a paper shows its 20 questions');
+  check((await page.locator('#start-exam').count()) === 1, 'a fresh install can start a mock test at once');
+  await page.locator('.paper-chip').nth(23).click();
+  await page.waitForFunction(() => location.hash === '#/level/12/M24');
+  await page.waitForSelector('.paper-grid');
+  check((await page.locator('.task-row').count()) === 20, 'paper 24 also has 20 questions');
+  const paper24 = await page.locator('.task-list').innerText();
+  await page.goto(base + '#/level/12/M37');
+  await page.waitForSelector('.paper-grid');
+  check((await page.locator('.task-list').innerText()) !== paper24, 'a different paper asks different questions');
+  await page.goto(base);
+  await page.waitForSelector('.levels');
 
   /* ---------- level 1 ---------- */
   await page.locator('.level-card[data-level="1"]').click();
@@ -273,9 +309,15 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' 
   await page.waitForSelector('.result.ok');
   check(true, 'the calculated field task is accepted');
 
-  /* ---------- every task opens ---------- */
-  const allTasks = await page.evaluate(() =>
-    window.XLCurriculum.levels.flatMap(l => l.tasks.map(t => [l.id, t.id])));
+  /* ---------- every task opens, plus a spread of generated questions ---------- */
+  const allTasks = await page.evaluate(() => {
+    const own = window.XLCurriculum.levels.flatMap(l => l.tasks.map(t => [l.id, t.id]));
+    // one question from every fifth paper, and every question of two whole papers
+    const papers = window.XLCurriculum.papers;
+    const sample = papers.filter((p, i) => i % 5 === 0).map(p => [12, p.tasks[3].id]);
+    const whole = [papers[1], papers[49]].flatMap(p => p.tasks.map(t => [12, t.id]));
+    return own.concat(sample, whole);
+  });
   let broken = [];
   for (const [lid, tid] of allTasks) {
     const before = errors.length;
@@ -292,13 +334,7 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' 
   console.log('  · tasks opened in the browser: ' + allTasks.length);
 
   /* ---------- the mock test ---------- */
-  await page.evaluate(() => {
-    window.XLCurriculum.levels.slice(0, 11).forEach(l => l.tasks.forEach(t => {
-      window.XLStore.data.tasks[t.id] = { best: 1, attempts: 1, hinted: false, seenSolution: false, solvedAt: new Date().toISOString() };
-    }));
-    window.XLStore.flush();
-  });
-  await page.goto(base + '#/level/12');
+  await page.goto(base + '#/level/12/M01');
   await page.waitForSelector('#start-exam');
   check((await page.locator('.task-row').count()) === 20, 'the mock test has 20 questions');
   check((await page.locator('.card').first().innerText()).includes('60 minutes'), 'the mock test runs for 60 minutes');
@@ -333,7 +369,19 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' 
   await page.goto(base + '#/stats');
   await page.waitForSelector('.stat-grid');
   check((await page.locator('table.ref tbody tr').count()) >= 1, 'the exam is recorded in the history');
+  check((await page.locator('table.ref').innerText()).includes('Mock test 1'),
+    'the history says which paper was sat');
+  check(await page.evaluate(() => window.XLStore.data.exams[0].paper) === 'M01',
+    'the sitting is filed against its paper');
   check((await page.locator('.stat').count()) === 6, 'the progress page renders');
+
+  /* a sat paper is marked on the picker, and the next one is offered */
+  await page.goto(base + '#/level/12');
+  await page.waitForSelector('.paper-grid');
+  check((await page.locator('.paper-chip.tried, .paper-chip.passed').count()) === 1,
+    'the paper just sat is marked on the picker');
+  check((await page.locator('#start-exam').innerText()).includes('mock test 2'),
+    'the next unsat paper is the one offered: ' + (await page.locator('#start-exam').innerText()));
 
   /* ---------- persistence ---------- */
   const xpBefore = await page.evaluate(() => window.XLStore.data.xp);
@@ -341,6 +389,21 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' 
   await page.waitForSelector('.levels');
   const xpAfter = await page.evaluate(() => window.XLStore.data.xp);
   check(xpBefore === xpAfter && xpAfter > 0, 'progress survives a reload');
+
+  /* the macOS case: progress is written to a file through the local server, so
+   * it survives the browser's own storage being empty — which is what happens
+   * when the app is relaunched on a different port, or in Safari, or as a file */
+  check(saved() && saved().xp === xpBefore, 'progress is written out to the store behind the server');
+  check(await page.evaluate(() => window.XLStore.persistent) === true, 'the store reports itself as durable');
+  check(/file|machine|browser/.test(await page.evaluate(() => window.XLStore.storedIn)),
+    'the app can say where progress is kept: ' + (await page.evaluate(() => window.XLStore.storedIn)));
+  await page.evaluate(() => { localStorage.clear(); });
+  await page.goto(base);
+  await page.waitForSelector('.levels');
+  check(await page.evaluate(() => window.XLStore.data.xp) === xpBefore,
+    'progress comes back from the store even with the browser storage wiped');
+  check(await page.evaluate(() => window.XLStore.data.exams.length) >= 1,
+    'the mock test history comes back with it');
 
   /* ---------- reference and dojo ---------- */
   await page.goto(base + '#/reference');

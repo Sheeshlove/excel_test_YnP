@@ -11,10 +11,12 @@
  * than stored as a constant, so the wording and the answer cannot drift apart.
  * ========================================================================== */
 (function (root, factory) {
-  var mod = factory();
-  if (typeof module === 'object' && module.exports) module.exports = mod;
+  var isNode = (typeof module === 'object' && module.exports);
+  var MOCKS = isNode ? require('./mocktests.js') : root.XLMockTests;
+  var mod = factory(MOCKS);
+  if (isNode) module.exports = mod;
   else root.XLCurriculum = mod;
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : this, function (MOCKS) {
   'use strict';
 
   var H = { header: true };          // header styling
@@ -2621,11 +2623,11 @@
     return sp;
   }
 
-  LEVELS.push({
+  var EXAM = {
     id: 12,
-    title: 'Mock test',
-    subtitle: '20 questions, 60 minutes — the real format',
-    goal: 'Sit the whole thing under time pressure with no hints, exactly as on the day.',
+    title: 'Mock tests',
+    subtitle: '50 papers · 20 questions · 60 minutes — the real format',
+    goal: 'Sit the whole thing under time pressure with no hints, exactly as on the day — fifty times over, on fifty different sets of data.',
     exam: true,
     timeLimitSec: 60 * 60,
     passScore: 0.7,
@@ -3322,7 +3324,25 @@
         }
       }
     ]
-  });
+  };
 
-  return { levels: LEVELS, deals: DEALS, dealCells: dealCells, tx: TX, txCells: txCells };
+  /* -------------------------------------------------------- the 50 papers --
+   * Paper 1 is the one written out above, question by question. Papers 2 to 50
+   * are built by mocktests.js: each has its own transaction book and its own
+   * twenty questions, drawn to the same quotas, so sitting one is the same
+   * exercise on data you have never seen. */
+  EXAM.papers = [{
+    id: 'M01', n: 1,
+    title: 'Mock test 1',
+    subtitle: 'The worked paper — every answer explained in full',
+    timeLimitSec: EXAM.timeLimitSec,
+    passScore: EXAM.passScore,
+    tasks: EXAM.tasks
+  }].concat(MOCKS ? MOCKS.papers(2, MOCKS.COUNT) : []);
+  LEVELS.push(EXAM);
+
+  return {
+    levels: LEVELS, exam: EXAM, papers: EXAM.papers,
+    deals: DEALS, dealCells: dealCells, tx: TX, txCells: txCells
+  };
 });

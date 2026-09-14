@@ -10,8 +10,16 @@ if [ -z "$PY" ]; then
   exit 1
 fi
 
+# The server holds the progress file, so the trainer remembers where you got to.
+if [ "$(uname)" = "Darwin" ]; then
+  PROFILE="$HOME/Library/Application Support/ExcelTrainer"
+else
+  PROFILE="$HOME/.exceltrainer"
+fi
+mkdir -p "$PROFILE"
+
 PORTFILE="$(mktemp)"
-"$PY" "$ROOT/packaging/server.py" "$ROOT/app" > "$PORTFILE" &
+"$PY" "$ROOT/packaging/server.py" "$ROOT/app" --profile "$PROFILE" > "$PORTFILE" &
 SRV=$!
 trap 'kill $SRV 2>/dev/null || true; rm -f "$PORTFILE"' EXIT INT TERM
 
@@ -25,13 +33,14 @@ done
 
 URL="http://127.0.0.1:$PORT/index.html"
 echo "Excel Trainer is running at $URL"
+echo "Progress is saved to $PROFILE/progress.json"
 echo "Press Ctrl+C to stop."
 
 if [ "$(uname)" = "Darwin" ]; then
   for NAME in "Google Chrome" "Microsoft Edge" "Brave Browser" "Chromium"; do
     BIN="/Applications/$NAME.app/Contents/MacOS/$NAME"
     if [ -x "$BIN" ]; then
-      "$BIN" --app="$URL" --user-data-dir="$HOME/Library/Application Support/ExcelTrainer/browser-profile" \
+      "$BIN" --app="$URL" --user-data-dir="$PROFILE/browser-profile" \
         --no-first-run --no-default-browser-check >/dev/null 2>&1
       exit 0
     fi

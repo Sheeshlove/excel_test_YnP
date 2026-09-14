@@ -4,6 +4,9 @@
  *  - an untouched sheet does NOT pass, so the marking really tests something
  *  - every cell address mentioned in the wording actually exists on the sheet
  *  - every task carries a worked explanation
+ *
+ * Everything below runs over the twelve levels AND over all fifty mock papers,
+ * so a generated question is held to exactly the same standard as a written one.
  */
 const XLF = require('../app/js/formula.js');
 const G = require('../app/js/grader.js');
@@ -19,12 +22,8 @@ function check(cond, msg) {
 
 const EMPTY_PIVOT = { rows: [], cols: [], values: [], filters: [] };
 
-CUR.levels.forEach(level => {
-  check(level.tasks.length > 0, `level ${level.id}: no tasks`);
-  check((level.theory || []).length >= 3, `level ${level.id}: not enough theory`);
-  const seen = new Set();
-
-  level.tasks.forEach(task => {
+function checkTask(task, seen) {
+  {
     const tag = `[${task.id}] ${task.title}`;
     check(!seen.has(task.id), `${tag}: duplicate id`);
     seen.add(task.id);
@@ -98,17 +97,61 @@ CUR.levels.forEach(level => {
         check(!PV.compare(built, bad).ok, `${tag}: a transposed pivot is accepted as correct`);
       }
     }
+  }
+}
+
+CUR.levels.forEach(level => {
+  check(level.tasks.length > 0, `level ${level.id}: no tasks`);
+  check((level.theory || []).length >= 3, `level ${level.id}: not enough theory`);
+  const seen = new Set();
+  level.tasks.forEach(task => checkTask(task, seen));
+});
+
+/* every one of the fifty mock papers, question by question */
+const allIds = new Set();
+CUR.papers.forEach(paper => {
+  const seen = new Set();
+  paper.tasks.forEach(task => {
+    check(!allIds.has(task.id), `${paper.id}: task id ${task.id} is used twice in the bank`);
+    allIds.add(task.id);
+    checkTask(task, seen);
   });
 });
 
-/* the exam must match the format the firm publishes */
+/* every paper must match the format the firm publishes */
 const exam = CUR.levels.find(l => l.exam);
 check(!!exam, 'there is no mock test level');
-check(exam.tasks.length === 20, `the mock test has ${exam.tasks.length} questions, the real one has 20`);
+check(exam.papers.length === 50, `the bank holds ${exam.papers.length} papers, not 50`);
 check(exam.timeLimitSec === 3600, `the mock test allows ${exam.timeLimitSec / 60} minutes, the real one allows 60`);
-check(exam.tasks.some(t => t.mode === 'pivot'), 'the mock test contains no pivot table question');
-check(exam.tasks.some(t => t.expect && t.expect.filtered), 'the mock test contains no filtering question');
-check(exam.tasks.some(t => t.expect && t.expect.sortedBy), 'the mock test contains no sorting question');
+
+exam.papers.forEach(paper => {
+  const tag = `paper ${paper.id}`;
+  check(paper.tasks.length === 20, `${tag} has ${paper.tasks.length} questions, the real test has 20`);
+  check((paper.timeLimitSec || exam.timeLimitSec) === 3600, `${tag} does not run for 60 minutes`);
+  check(paper.tasks.some(t => t.mode === 'pivot'), `${tag} contains no pivot table question`);
+  check(paper.tasks.some(t => t.expect && t.expect.filtered), `${tag} contains no filtering question`);
+  check(paper.tasks.some(t => t.expect && t.expect.sortedBy), `${tag} contains no sorting question`);
+  const formulas = paper.tasks.flatMap(t => Object.values(t.solution || {})).join(' ');
+  ['SUM(', 'AVERAGE(', 'IF(', 'SUMIF'].forEach(fn =>
+    check(formulas.indexOf(fn) >= 0, `${tag} never asks for ${fn}`));
+  check(/VLOOKUP\(|INDEX\(|MATCH\(/.test(formulas), `${tag} contains no lookup question`);
+  check(paper.tasks.every(t => t.points >= 20), `${tag} has a question worth less than 20 points`);
+});
+
+/* a paper is the same paper every time it is opened, or a score means nothing */
+const again = require('../app/js/mocktests.js');
+const twice = again.paper(17);
+check(twice.tasks.map(t => t.title).join('|') === exam.papers[16].tasks.map(t => t.title).join('|'),
+  'paper 17 is not reproducible: asking for it twice gives different questions');
+check(JSON.stringify(again.makeData(23).rows) === JSON.stringify(again.makeData(23).rows),
+  'the data of a paper is not reproducible');
+
+/* and no two papers are the same paper */
+const shapes = new Set(exam.papers.map(p =>
+  p.tasks.map(t => t.kind || t.id).join(',') + '/' +
+  JSON.stringify((p.tasks[0].sheet.cells || {}).G2)));
+check(shapes.size === exam.papers.length,
+  `only ${shapes.size} of the ${exam.papers.length} papers are distinct`);
 
 /* the syllabus must cover everything the firm says it assesses */
 const allSolutions = CUR.levels.flatMap(l => l.tasks.flatMap(t => Object.values(t.solution || {}))).join(' ');
@@ -120,5 +163,6 @@ problems.slice(0, 40).forEach(p => console.log('  x ' + p));
 console.log(`\nprogramme: ${pass} checks passed, ${fail} failed`);
 console.log(`levels: ${CUR.levels.length}, tasks: ${CUR.levels.reduce((a, l) => a + l.tasks.length, 0)}, ` +
   `points: ${CUR.levels.reduce((a, l) => a + l.tasks.reduce((b, t) => b + t.points, 0), 0)}`);
+console.log(`mock papers: ${CUR.papers.length}, questions: ${CUR.papers.reduce((a, p) => a + p.tasks.length, 0)}`);
 module.exports = { pass, fail };
 if (require.main === module && fail) process.exit(1);

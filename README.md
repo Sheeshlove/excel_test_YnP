@@ -17,7 +17,7 @@ The firm describes the test as follows, and the app mirrors it:
 
 | The firm says | In the app |
 |---|---|
-| 20 questions of mixed difficulty | Level 12 is a 20-question mock test |
+| 20 questions of mixed difficulty | Level 12 holds **50 mock tests**, 20 questions each |
 | 60 minutes | A 60-minute countdown, marking at the end |
 | Working with tables, formulas and **pivot tables** | Levels 7 and 8 are entirely sorting/filtering and pivot tables |
 | Basic and advanced formulas: SUM, AVERAGE, COUNT; IF, IFS, SUMIF; VLOOKUP, INDEX/MATCH | Levels 1–6 |
@@ -48,12 +48,32 @@ If you would rather not build the bundle:
 Last resort: open `app/index.html` in Google Chrome. Safari will not save
 progress that way, because it blocks storage for local files.
 
+### Where your progress is kept
+
+```
+~/Library/Application Support/ExcelTrainer/progress.json
+```
+
+A real file, written after every answer and again as the app quits. It is
+written by whichever of these the app has:
+
+| | |
+|---|---|
+| the native window (`swiftc` present) | writes the file itself, so progress is kept even with no Python and no browser storage at all |
+| the local server (`python3` present) | the page saves through `/api/progress`, and the server writes the same file |
+| neither | the browser's own storage, which Chrome keeps and Safari does not |
+
+Because the file is what matters, progress no longer depends on which port the
+local server happened to get, which browser the launcher found, or whether the
+page was opened as a file. The **Progress** page names the exact file it is
+using, and can export it and load it back to move to another machine.
+
 ### What `build_app.sh` does
 
 | Step | If the tool is present | If it is not |
 |---|---|---|
 | `swiftc` (Xcode CLT) | builds a native WKWebView window — the app opens with no browser | the app opens as a tab-less, address-bar-less Chrome/Edge/Brave window |
-| `python3` | runs a local server on 127.0.0.1, so progress is always saved | the page opens as a file; Chrome still saves progress, Safari does not |
+| `python3` | runs a local server on a fixed port on 127.0.0.1, which holds the progress file | the page opens as a file; the native window still saves, a browser only if it is Chrome |
 | `sips` + `iconutil` | builds a proper `.icns` icon | the icon is copied as a PNG |
 
 For the best of all three:
@@ -69,8 +89,10 @@ locally created files carry no quarantine attribute.
 
 ## The programme
 
-Twelve levels, 83 tasks, 2,195 points. A level opens once the previous one
-reaches 60% of its points.
+Twelve levels, 83 tasks, 2,195 points — plus 50 mock tests of 20 questions each.
+**Everything is open from the first launch**: no level has to be unlocked, and
+any of the fifty papers can be sat on day one. The order below is a
+recommendation, not a gate.
 
 | # | Level | What it covers |
 |---|---|---|
@@ -85,7 +107,7 @@ reaches 60% of its points.
 | 9 | Financial calculations | discounting, `NPV`, `IRR`, `PMT`, unit economics, break-even |
 | 10 | Data analysis | `SUMPRODUCT` conditions, sensitivity tables, cohorts, scorecards, variance |
 | 11 | Consulting cases | market sizing both ways, price-volume-mix, the EBITDA bridge, capacity, pricing |
-| 12 | **Mock test** | 20 questions, 60 minutes, no hints, 70% to pass |
+| 12 | **Mock tests** | 50 papers, each 20 questions in 60 minutes, no hints, 70% to pass |
 
 Alongside the levels:
 
@@ -94,8 +116,47 @@ Alongside the levels:
   the number keys; never touch the mouse.
 * **Reference** — shortcuts side by side for macOS and Windows, functions with
   their typical use, and the meaning of `#N/A`, `#VALUE!`, `#REF!` and the rest.
-* **Progress** — XP, daily streak, dojo accuracy, mock test history, and a list
-  of tasks worth revisiting.
+* **Progress** — XP, daily streak, dojo accuracy, which of the fifty papers you
+  have sat and passed, every sitting with its score and time, and a list of
+  tasks worth revisiting.
+
+---
+
+## Fifty mock tests
+
+Level 12 is not one paper but fifty, and all of them are available immediately.
+
+Paper 1 is written out by hand, question by question, with a full walk-through
+of every answer. Papers 2 to 50 are built by `app/js/mocktests.js`: each one gets
+its own transaction book — its own regions, products, managers, dates, prices and
+volumes — and draws twenty questions from a bank of question types under fixed
+quotas:
+
+| Area | Questions per paper |
+|---|---|
+| Basic aggregates — `SUM`, `AVERAGE`, `COUNT`, `MEDIAN`, `LARGE` | 2 |
+| Conditional aggregates — `SUMIFS`, `COUNTIFS`, `AVERAGEIFS`, wildcards, `SUMPRODUCT`, the region × product cross-tab | 4 |
+| Logic — `IF`, nesting, `AND`/`OR` | 2 |
+| Lookups — `VLOOKUP` exact and approximate, `INDEX`+`MATCH`, two-way lookup, `IFERROR` | 3 |
+| Text and dates — composite keys, `MONTH` and quarters, `EOMONTH`, date arithmetic | 2 |
+| Analysis — shares of total, weighted averages, concentration, CAGR, `NPV`/`IRR`, break-even | 3 |
+| Sorting | 1 |
+| Filtering with `SUBTOTAL` | 1 |
+| Pivot tables — rows, columns, report filters, % of total, calculated fields | 2 |
+
+So every paper covers everything the firm says it assesses, and no two papers
+ask the same question of the same numbers.
+
+Each paper is derived from its own number by a seeded generator, so **paper 7 is
+the same paper 7 on every machine and after every relaunch** — a score today is
+comparable with your score on it last week. Nothing is stored as an answer: as
+everywhere else in the app, each question carries the formula that solves it and
+the marking works the expected value out by running that formula.
+
+The mock test page shows all fifty as a grid, marked green where you passed and
+amber where you have sat one without passing, and offers you the first one you
+have not yet taken. Sitting a paper never costs you anything: a poor run adds a
+row to your history and nothing else.
 
 ---
 
@@ -133,10 +194,10 @@ This is deliberate, and the app says so on the home screen:
   recorded; a score can go up, never down.
 * **Clear my work** clears the current task only. Points, other tasks and the
   mock test history are untouched.
-* A level opens at **60%** of the previous level's points, so one task you
+* Every level and every mock test is **open from the start**, so one task you
   cannot crack today never blocks you — skip it and come back.
-* A failed mock test changes nothing except adding a row to your history. Sit it
-  as often as you like.
+* A failed mock test changes nothing except adding a row to your history. Sit any
+  paper as often as you like.
 * Work in progress is kept while the app is open, so clicking away from a
   half-finished task and coming back does not throw it away.
 * The only thing that erases progress is the **Erase everything** button on the
@@ -199,8 +260,8 @@ npm test           # runs everything
 | Suite | What it checks |
 |---|---|
 | `tests/formula.test.js` | 122 checks on the engine, every expected value verified against Excel's behaviour |
-| `tests/curriculum.test.js` | 3,466 checks: every task's reference answer solves it, raises no Excel error, and an untouched sheet fails; every address named in a task exists; every task has an explanation; the mock test matches the published 20-question / 60-minute format |
-| `tests/ui.test.js` | 65 checks in a real Chromium: typing formulas, `⌘D`, `⌘T`, `⌘Z`, sorting, filtering with `SUBTOTAL`, building and marking pivot tables, the explanation panel, the timed mock test, the guarantee that a failed retry never lowers a score, and all 83 tasks opening cleanly |
+| `tests/curriculum.test.js` | 37,136 checks over the 83 tasks **and all 1,000 mock test questions**: every reference answer solves its task, raises no Excel error, and an untouched sheet fails; every address named in a task exists; every task has an explanation; every one of the 50 papers matches the published 20-question / 60-minute format and is reproducible from its number |
+| `tests/ui.test.js` | 81 checks in a real Chromium: typing formulas, `⌘D`, `⌘T`, `⌘Z`, sorting, filtering with `SUBTOTAL`, building and marking pivot tables, the explanation panel, the timed mock test, the guarantee that a failed retry never lowers a score, that every level and all 50 papers are open on a fresh install, that progress written to the file store survives the browser's own storage being wiped, and 133 tasks opening cleanly |
 
 ### Layout
 
@@ -212,12 +273,13 @@ app/                 the application (also opens as a plain web page)
   js/explain.js      takes a formula apart and explains it in plain English
   js/grader.js       marking, including sorting, filters and pivot layouts
   js/curriculum.js   12 levels and 83 tasks, each with its explanation
+  js/mocktests.js    the bank: 50 mock papers of 20 questions, generated
   js/drills.js       the dojo: shortcuts, functions, errors
   js/grid.js         the interactive sheet with Excel's keyboard
   js/pivotui.js      the pivot builder
   js/app.js          screens and navigation
   js/storage.js      progress
-packaging/           server, launcher, native Swift window, icon
+packaging/           server and progress store, launcher, native Swift window, icon
 build_app.sh         builds ExcelTrainer.app
 run.sh               runs it without building a bundle
 tests/               the checks
@@ -252,10 +314,41 @@ stretched over the rest, shifting references exactly as `⌘D` would. Run
 reference answer raises no error, that an untouched sheet fails, and that every
 cell address mentioned in the wording actually exists.
 
+### Adding a mock test question type
+
+In `app/js/mocktests.js`, call `question(id, group, points, make)`. `make`
+receives the paper's data and returns the same object as above, minus the `id`
+and `points`, which the paper assigns:
+
+```js
+question('share-of-revenue', 'analysis', 25, function (d) {
+  var region = d.commonest('region');           // never an empty answer
+  return {
+    title: 'Share of one region',
+    brief: 'J2 — the share of total revenue booked in ' + region + '.',
+    hint: 'SUMIF over the Region column, divided by SUM of the whole column.',
+    sheet: sheetFor(d, metricBlock([region + ' share of revenue'])),
+    table: TABLE,
+    target: ['J2'],
+    solution: { J2: '=SUMIF($B$2:$B$16,"' + region + '",$G$2:$G$16)/SUM($G$2:$G$16)' },
+    check: { J2: { mustUseAny: ['SUMIF', 'SUMIFS'] } },
+    explain: { idea: '…', walk: ['…'], mistakes: ['…'], onTheJob: '…' }
+  };
+});
+```
+
+The `group` must be one of the quota groups above, and adding one to a group
+changes what all fifty papers can draw. Derive the parameters from the data
+(`d.commonest`, `d.byRevenue`, `d.sumWhere`) rather than hard-coding them, so the
+question is answerable whatever numbers the paper happened to get. Then run
+`npm run test:curriculum`: it puts the new type through all fifty papers.
+
 ---
 
 ## Your data
 
-Progress is stored in the app's own browser storage and never leaves your
-machine. The Progress page can export it to a file and load it back, for
-instance to move it to another computer.
+Progress lives in one file on your own machine —
+`~/Library/Application Support/ExcelTrainer/progress.json` — and never leaves
+it. The Progress page names the file it is using, can export it and load it
+back, for instance to move to another computer, and **Erase everything** is the
+only thing that removes it.

@@ -51,7 +51,36 @@
   }
   function taskById(level, id) {
     for (var i = 0; i < level.tasks.length; i++) if (level.tasks[i].id === id) return level.tasks[i];
+    var found = null;
+    (level.papers || []).forEach(function (p) {
+      p.tasks.forEach(function (t) { if (t.id === id) found = t; });
+    });
+    return found;
+  }
+  // which of the fifty papers a question belongs to, and the questions around it
+  function paperOf(level, task) {
+    var papers = level.papers || [];
+    for (var i = 0; i < papers.length; i++) {
+      if (papers[i].tasks.indexOf(task) >= 0) return papers[i];
+    }
+    return { id: level.id, title: level.title, tasks: level.tasks,
+             timeLimitSec: level.timeLimitSec, passScore: level.passScore };
+  }
+  function paperById(level, id) {
+    var papers = level.papers || [];
+    for (var i = 0; i < papers.length; i++) if (papers[i].id === id) return papers[i];
     return null;
+  }
+  // the paper to offer next: the first one never sat, else the first not passed
+  function suggestedPaper(level) {
+    var papers = level.papers || [];
+    var unsat = null, unpassed = null;
+    papers.forEach(function (p) {
+      var best = Store.bestExam(p.id);
+      if (!best && !unsat) unsat = p;
+      else if (best && best.score < level.passScore && !unpassed) unpassed = p;
+    });
+    return unsat || unpassed || papers[0];
   }
   function levelStats(level) {
     var max = 0, got = 0, done = 0;
@@ -62,15 +91,9 @@
     });
     return { max: max, got: got, done: done, total: level.tasks.length, share: max ? got / max : 0 };
   }
-  var UNLOCK = 0.6;
-  function levelUnlocked(level) {
-    var idx = CUR.levels.indexOf(level);
-    if (idx <= 0) return true;
-    if (level.exam) {
-      return CUR.levels.slice(0, idx).every(function (l) { return levelStats(l).share >= UNLOCK; });
-    }
-    return levelStats(CUR.levels[idx - 1]).share >= UNLOCK;
-  }
+  // Every level — the mock tests included — is open from the very first launch.
+  // The order below is the recommended one, not a gate: nothing has to be
+  // unlocked and nothing can be locked again.
   function updateHeader() {
     var d = Store.data.streak.days;
     document.getElementById('xp-value').textContent = Store.data.xp;
@@ -86,7 +109,6 @@
     var next = null;
     for (var i = 0; i < CUR.levels.length && !next; i++) {
       var lv = CUR.levels[i];
-      if (!levelUnlocked(lv)) break;
       for (var j = 0; j < lv.tasks.length; j++) {
         if (Store.task(lv.tasks[j].id).best < 1) { next = { level: lv, task: lv.tasks[j] }; break; }
       }
@@ -112,9 +134,8 @@
     page.appendChild(h(
       '<div class="card notice">' +
         '<b>Nothing here can be lost.</b> A wrong answer costs no points and can be retried as often as you like — ' +
-        'only your best attempt is ever recorded. A level opens once the previous one reaches ' +
-        Math.round(UNLOCK * 100) + '% of its points, so a task you cannot crack today will never block you: ' +
-        'move on and come back to it.' +
+        'only your best attempt is ever recorded. Every level and every mock test is open from the start, ' +
+        'so a task you cannot crack today will never block you: move on and come back to it.' +
       '</div>'));
 
     var review = reviewQueue();
@@ -138,29 +159,41 @@
 
     var grid = h('<div class="levels"></div>');
     CUR.levels.forEach(function (lv) {
-      var st = levelStats(lv), unlocked = levelUnlocked(lv);
-      var cls = 'card level-card' + (unlocked ? '' : ' locked') + (st.share >= 0.999 ? ' done' : '') + (lv.exam ? ' exam' : '');
-      var badge = !unlocked ? '<span class="badge">locked</span>'
+      var st = levelStats(lv);
+      // the mock test level counts in papers passed, not in task points
+      var passed = !lv.exam ? 0 : lv.papers.filter(function (p) {
+        var b = Store.bestExam(p.id);
+        return b && b.score >= lv.passScore;
+      }).length;
+      var share = lv.exam ? passed / lv.papers.length : st.share;
+      var cls = 'card level-card' + (share >= 0.999 ? ' done' : '') + (lv.exam ? ' exam' : '');
+      var badge = lv.exam
+        ? (passed ? '<span class="badge ok">' + passed + ' of ' + lv.papers.length + ' passed</span>'
+                  : '<span class="badge gold">' + lv.papers.length + ' papers</span>')
         : st.done === st.total ? '<span class="badge ok">complete</span>'
         : st.done ? '<span class="badge warn">' + st.done + ' of ' + st.total + '</span>'
-        : (lv.exam ? '<span class="badge gold">mock test</span>' : '<span class="badge">not started</span>');
+        : '<span class="badge">not started</span>';
+      var satPapers = !lv.exam ? 0 : lv.papers.filter(function (p) { return !!Store.bestExam(p.id); }).length;
+      var meta = lv.exam
+        ? (satPapers ? satPapers + ' of ' + lv.papers.length + ' sat' : 'none sat yet')
+        : st.got + ' / ' + st.max + ' points';
       grid.appendChild(h(
-        '<div class="' + cls + '" ' + (unlocked ? 'data-level="' + lv.id + '"' : '') + '>' +
+        '<div class="' + cls + '" data-level="' + lv.id + '">' +
           '<div class="level-top">' +
             '<div class="level-num">' + (lv.exam ? '★' : lv.id) + '</div>' +
             '<div><div class="level-title">' + esc(lv.title) + '</div>' +
             '<div class="level-sub">' + esc(lv.subtitle) + '</div></div>' +
           '</div>' +
-          '<div class="progressbar"><i style="width:' + Math.round(st.share * 100) + '%"></i></div>' +
-          '<div class="level-meta"><span>' + st.got + ' / ' + st.max + ' points</span>' + badge + '</div>' +
+          '<div class="progressbar"><i style="width:' + Math.round(share * 100) + '%"></i></div>' +
+          '<div class="level-meta"><span>' + meta + '</span>' + badge + '</div>' +
         '</div>'));
     });
     page.appendChild(grid);
 
     if (!Store.persistent) {
       page.appendChild(h('<div class="card" style="padding:12px 16px;margin-top:18px;font-size:12.5px;color:var(--muted)">' +
-        'This browser will not let the page save anything, so progress will be lost when you close it. ' +
-        'Launch the app through ExcelTrainer.app or run.sh and it will be kept.</div>'));
+        'Nothing can be saved here, so progress will be lost when you close this window. ' +
+        'Launch the app through ExcelTrainer.app or run.sh and it is written to a file on your Mac.</div>'));
     }
     show(page);
   }
@@ -181,14 +214,12 @@
   }
 
   /* ============================================================= LEVEL === */
-  function renderLevel(id) {
+  function renderLevel(id, paperId) {
     var lv = levelById(id);
     if (!lv) return renderHome();
-    if (!levelUnlocked(lv)) {
-      toast('This level opens once the previous one reaches ' + Math.round(UNLOCK * 100) + '% of its points');
-      return renderHome();
-    }
     var st = levelStats(lv);
+    var paper = lv.exam ? (paperById(lv, paperId) || suggestedPaper(lv)) : null;
+    var tasks = paper ? paper.tasks : lv.tasks;
 
     var page = h('<div class="page"></div>');
     page.appendChild(h(
@@ -202,20 +233,48 @@
     var left = h('<div></div>');
 
     if (lv.exam) {
+      var sat = lv.papers.filter(function (p) { return !!Store.bestExam(p.id); }).length;
+      var passed = lv.papers.filter(function (p) {
+        var b = Store.bestExam(p.id);
+        return b && b.score >= lv.passScore;
+      }).length;
+
       left.appendChild(h(
         '<div class="card" style="padding:18px 20px;margin-bottom:16px">' +
-          '<div style="font-weight:600;margin-bottom:6px">Mock test: ' + lv.tasks.length + ' questions, ' +
-          Math.round(lv.timeLimitSec / 60) + ' minutes, no hints</div>' +
-          '<div style="color:var(--muted);font-size:13px;margin-bottom:14px">Pass mark ' +
-          Math.round(lv.passScore * 100) + '%. You can move between questions freely and your answers are kept; ' +
-          'marking happens at the end, like the real thing. Sit it as many times as you want — a poor run never ' +
-          'reduces the points you already have.</div>' +
-          '<button class="btn btn-primary" id="start-exam">Start the mock test</button>' +
+          '<div style="font-weight:600;margin-bottom:6px">' + esc(paper.title) + ': ' + tasks.length +
+          ' questions, ' + Math.round((paper.timeLimitSec || lv.timeLimitSec) / 60) + ' minutes, no hints</div>' +
+          '<div style="color:var(--muted);font-size:13px;margin-bottom:14px">' +
+          esc(paper.subtitle || '') + (paper.subtitle ? '<br>' : '') +
+          'Pass mark ' + Math.round(lv.passScore * 100) + '%. You can move between questions freely and your ' +
+          'answers are kept; marking happens at the end, like the real thing. Sit any paper as many times as ' +
+          'you want — a poor run never reduces the points you already have.</div>' +
+          '<button class="btn btn-primary" id="start-exam">Start ' + esc(paper.title.toLowerCase()) + '</button>' +
         '</div>'));
+
+      var picker = h('<div class="card" style="padding:16px 18px;margin-bottom:16px"></div>');
+      picker.appendChild(h('<div style="font-weight:600;margin-bottom:4px">Fifty papers</div>'));
+      picker.appendChild(h('<div style="color:var(--muted);font-size:12.5px;margin-bottom:12px">' +
+        'Every paper is twenty questions on its own set of data, and every one of them is open now. ' +
+        'Pick one to see its questions, then start it. ' +
+        (sat ? 'Sat ' + sat + ' of ' + lv.papers.length + ', passed ' + passed + '.'
+             : 'None sat yet — paper 1 comes with a full walk-through of every answer.') +
+        '</div>'));
+      var chips = h('<div class="paper-grid"></div>');
+      lv.papers.forEach(function (p) {
+        var best = Store.bestExam(p.id);
+        var cls = 'paper-chip' + (p.id === paper.id ? ' current' : '') +
+          (best ? (best.score >= lv.passScore ? ' passed' : ' tried') : '');
+        chips.appendChild(h('<button class="' + cls + '" data-paper="' + p.id + '" ' +
+          'title="' + esc(p.title + (p.subtitle ? ' — ' + p.subtitle : '')) + '">' +
+          '<b>' + p.n + '</b>' +
+          '<span>' + (best ? Math.round(best.score * 100) + '%' : '—') + '</span></button>'));
+      });
+      picker.appendChild(chips);
+      left.appendChild(picker);
     }
 
     var list = h('<div class="task-list"></div>');
-    lv.tasks.forEach(function (t) {
+    tasks.forEach(function (t) {
       var s = Store.task(t.id), earned = Store.earnedFor(t);
       var cls = s.best >= 1 ? 'done' : (s.attempts ? 'partial' : '');
       var mark = s.best >= 1 ? '✓' : (s.attempts ? '·' : '');
@@ -240,13 +299,16 @@
     });
     theory.appendChild(h('<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)">' +
       'Level progress: ' + st.got + ' of ' + st.max + ' points. ' +
-      Math.round(UNLOCK * 100) + '% opens the next level.</div>'));
+      'Every level is open from the start — take them in any order you like.</div>'));
     layout.appendChild(theory);
     page.appendChild(layout);
     show(page);
 
     var se = document.getElementById('start-exam');
-    if (se) se.addEventListener('click', function () { startExam(lv); });
+    if (se) se.addEventListener('click', function () { startExam(lv, paper); });
+    Array.prototype.forEach.call(page.querySelectorAll('[data-paper]'), function (b) {
+      b.addEventListener('click', function () { go('level/' + lv.id + '/' + b.dataset.paper); });
+    });
   }
 
   /* ============================================================== TASK === */
@@ -255,7 +317,11 @@
     if (!lv) return renderHome();
     var task = taskById(lv, taskId);
     if (!task) return renderLevel(levelId);
-    var examMode = !!(state.exam && state.exam.level.id === lv.id);
+    // on the mock test level a question belongs to one of the fifty papers;
+    // everywhere else the level itself plays that part
+    var paper = lv.exam ? paperOf(lv, task) : { id: lv.id, tasks: lv.tasks, title: lv.title };
+    var siblings = paper.tasks;
+    var examMode = !!(state.exam && state.exam.paper.id === paper.id);
 
     state.level = lv; state.task = task;
     var targets = G.targetCells(task);
@@ -267,11 +333,14 @@
       sheet = state.sheets[task.id] || (state.sheets[task.id] = G.buildSheet(task));
     }
 
-    var idx = lv.tasks.indexOf(task);
+    var idx = siblings.indexOf(task);
     var wrap = h('<div class="workspace"></div>');
     var panel = h('<aside class="task-panel"></aside>');
+    var crumb = lv.exam
+      ? '<button data-go="level/' + lv.id + '/' + paper.id + '">' + esc(paper.title) + '</button>'
+      : '<button data-level="' + lv.id + '">Level ' + lv.id + '</button>';
     panel.appendChild(h('<div class="crumbs"><button data-nav="home">Programme</button> › ' +
-      '<button data-level="' + lv.id + '">Level ' + lv.id + '</button> › Question ' + (idx + 1) + ' of ' + lv.tasks.length + '</div>'));
+      crumb + ' › Question ' + (idx + 1) + ' of ' + siblings.length + '</div>'));
     panel.appendChild(h('<h2>' + esc(task.title) + '</h2>'));
     panel.appendChild(h('<div class="brief">' + esc(task.brief) + '</div>'));
 
@@ -297,7 +366,7 @@
       actions.appendChild(h('<button class="btn btn-ghost" id="btn-solution">Show the answer</button>'));
     } else {
       if (idx > 0) actions.appendChild(h('<button class="btn" id="btn-prev">← Back</button>'));
-      if (idx < lv.tasks.length - 1) actions.appendChild(h('<button class="btn btn-primary" id="btn-next">Next →</button>'));
+      if (idx < siblings.length - 1) actions.appendChild(h('<button class="btn btn-primary" id="btn-next">Next →</button>'));
       actions.appendChild(h('<button class="btn btn-ghost" id="btn-finish">Finish the test</button>'));
     }
     panel.appendChild(actions);
@@ -307,7 +376,7 @@
 
     if (examMode) {
       var nav = h('<div class="exam-nav"></div>');
-      lv.tasks.forEach(function (t, i) {
+      siblings.forEach(function (t, i) {
         var sh = state.exam.sheets[t.id];
         var touched = (sh && G.targetCells(t).some(function (a1) { return sh.rawAt(a1) !== ''; })) ||
           (state.exam.pivots[t.id] && state.exam.pivots[t.id].values && state.exam.pivots[t.id].values.length);
@@ -486,9 +555,9 @@
       });
     } else {
       var prev = document.getElementById('btn-prev');
-      if (prev) prev.addEventListener('click', function () { go(lv.id + '/' + lv.tasks[idx - 1].id); });
+      if (prev) prev.addEventListener('click', function () { go(lv.id + '/' + siblings[idx - 1].id); });
       var nx = document.getElementById('btn-next');
-      if (nx) nx.addEventListener('click', function () { go(lv.id + '/' + lv.tasks[idx + 1].id); });
+      if (nx) nx.addEventListener('click', function () { go(lv.id + '/' + siblings[idx + 1].id); });
       document.getElementById('btn-finish').addEventListener('click', function () {
         if (confirm('Finish the mock test and see how you did?')) finishExam();
       });
@@ -571,12 +640,15 @@
   function showResult(slot, res, task, rec, lv, sheet) {
     slot.innerHTML = '';
     if (res.passed) {
-      var next = lv.tasks[lv.tasks.indexOf(task) + 1];
+      var around = lv.exam ? paperOf(lv, task).tasks : lv.tasks;
+      var next = around[around.indexOf(task) + 1];
       slot.appendChild(h('<div class="result ok"><b>Correct.</b> ' + rec.earned + ' of ' + task.points + ' points' +
         (rec.delta ? ' · <b>+' + rec.delta + ' XP</b>' : '') + '</div>'));
       slot.appendChild(buildExplanation(task, sheet, { alwaysOpen: true }));
       var nav = h('<div class="panel-actions" style="margin-top:12px"></div>');
       if (next) nav.appendChild(h('<button class="btn btn-primary" data-go="' + lv.id + '/' + next.id + '">Next question →</button>'));
+      else if (lv.exam) nav.appendChild(h('<button class="btn btn-primary" data-go="level/' + lv.id + '/' +
+        paperOf(lv, task).id + '">Back to the paper →</button>'));
       else nav.appendChild(h('<button class="btn btn-primary" data-level="' + lv.id + '">Level complete →</button>'));
       slot.appendChild(nav);
       return;
@@ -593,21 +665,22 @@
   }
 
   /* ============================================================== EXAM === */
-  function startExam(lv) {
-    state.exam = { level: lv, started: Date.now(), sheets: {}, pivots: {}, finished: false };
-    lv.tasks.forEach(function (t) {
+  function startExam(lv, paper) {
+    paper = paper || suggestedPaper(lv);
+    state.exam = { level: lv, paper: paper, started: Date.now(), sheets: {}, pivots: {}, finished: false };
+    paper.tasks.forEach(function (t) {
       state.exam.sheets[t.id] = G.buildSheet(t);
       state.exam.pivots[t.id] = { rows: [], cols: [], values: [], filters: [] };
     });
-    go(lv.id + '/' + lv.tasks[0].id);
+    go(lv.id + '/' + paper.tasks[0].id);
   }
 
   function tickExam() {
     clearInterval(state.timerId);
     if (!document.getElementById('exam-timer') || !state.exam) return;
-    var lv = state.exam.level;
+    var limit = state.exam.paper.timeLimitSec || state.exam.level.timeLimitSec;
     function upd() {
-      var left = lv.timeLimitSec - (Date.now() - state.exam.started) / 1000;
+      var left = limit - (Date.now() - state.exam.started) / 1000;
       var e = document.getElementById('exam-timer');
       if (!e) { clearInterval(state.timerId); return; }
       e.textContent = mmss(left) + ' left';
@@ -622,8 +695,8 @@
     clearInterval(state.timerId);
     var ex = state.exam;
     if (!ex) return renderHome();
-    var lv = ex.level, rows = [], points = 0, maxPoints = 0;
-    lv.tasks.forEach(function (t) {
+    var lv = ex.level, paper = ex.paper, rows = [], points = 0, maxPoints = 0;
+    paper.tasks.forEach(function (t) {
       var extra = t.mode === 'pivot' ? { pivot: ex.pivots[t.id] } : undefined;
       var res = G.grade(t, ex.sheets[t.id], extra);
       var earned = Math.round(t.points * res.score);
@@ -633,18 +706,26 @@
     });
     var seconds = Math.round((Date.now() - ex.started) / 1000);
     var share = maxPoints ? points / maxPoints : 0;
-    Store.recordExam({ date: new Date().toISOString(), score: share, points: points, maxPoints: maxPoints, seconds: seconds });
+    Store.recordExam({
+      date: new Date().toISOString(), paper: paper.id, title: paper.title,
+      score: share, points: points, maxPoints: maxPoints, seconds: seconds
+    });
     updateHeader();
     state.exam = null;
 
     var page = h('<div class="page"></div>');
     var passed = share >= lv.passScore;
+    var previous = Store.examsFor(paper.id);
     page.appendChild(h(
-      '<div class="page-head"><div class="crumbs"><button data-nav="home">Programme</button> › Result</div>' +
+      '<div class="page-head"><div class="crumbs"><button data-nav="home">Programme</button> › ' +
+      '<button data-go="level/' + lv.id + '/' + paper.id + '">' + esc(paper.title) + '</button> › Result</div>' +
       '<h1>' + (passed ? 'Passed' : 'Not passed this time') + '</h1>' +
-      '<p>' + Math.round(share * 100) + '% (' + points + ' of ' + maxPoints + ' points) in ' + mmss(seconds) +
-      (byTime ? '. Time ran out.' : '') + ' The pass mark is ' + Math.round(lv.passScore * 100) + '%. ' +
-      'Open any question below to see the worked answer — your other progress is untouched.</p></div>'));
+      '<p>' + esc(paper.title) + ': ' + Math.round(share * 100) + '% (' + points + ' of ' + maxPoints +
+      ' points) in ' + mmss(seconds) + (byTime ? '. Time ran out.' : '') + ' The pass mark is ' +
+      Math.round(lv.passScore * 100) + '%. ' +
+      (previous.length > 1 ? 'That is sitting number ' + previous.length + ' of this paper. ' : '') +
+      'Open any question below to see the worked answer — your other progress is untouched, and ' +
+      'forty-nine other papers are waiting.</p></div>'));
 
     var list = h('<div class="task-list"></div>');
     rows.forEach(function (r) {
@@ -661,9 +742,13 @@
         '</div>'));
     });
     page.appendChild(list);
+    var nextPaper = suggestedPaper(lv);
     page.appendChild(h('<div class="panel-actions" style="margin-top:18px">' +
-      '<button class="btn btn-primary" data-level="' + lv.id + '">Sit it again</button>' +
-      '<button class="btn" data-nav="home">Back to the programme</button></div>'));
+      '<button class="btn btn-primary" data-go="level/' + lv.id + '/' + paper.id + '">Sit this paper again</button>' +
+      (nextPaper && nextPaper.id !== paper.id
+        ? '<button class="btn" data-go="level/' + lv.id + '/' + nextPaper.id + '">Try ' +
+          esc(nextPaper.title.toLowerCase()) + ' →</button>' : '') +
+      '<button class="btn btn-ghost" data-nav="home">Back to the programme</button></div>'));
     show(page);
   }
 
@@ -877,13 +962,26 @@
     });
     page.appendChild(grid);
 
+    var examLevel = CUR.levels.filter(function (l) { return l.exam; })[0];
+    if (examLevel) {
+      var papers = examLevel.papers || [];
+      var satIds = {};
+      d.exams.forEach(function (e) { if (e.paper) satIds[e.paper] = true; });
+      var satCount = Object.keys(satIds).length;
+      var passedCount = papers.filter(function (p) {
+        var b = Store.bestExam(p.id);
+        return b && b.score >= examLevel.passScore;
+      }).length;
+      page.appendChild(h('<h3 style="margin:22px 0 10px;font-size:16px">Mock tests — ' +
+        satCount + ' of ' + papers.length + ' papers sat, ' + passedCount + ' passed</h3>'));
+    }
     if (d.exams.length) {
-      page.appendChild(h('<h3 style="margin:22px 0 10px;font-size:16px">Mock tests</h3>'));
       var t = h('<table class="ref"></table>');
-      t.appendChild(h('<thead><tr><th>Date</th><th>Score</th><th>Points</th><th>Time</th></tr></thead>'));
+      t.appendChild(h('<thead><tr><th>Date</th><th>Paper</th><th>Score</th><th>Points</th><th>Time</th></tr></thead>'));
       var tb = h('<tbody></tbody>');
       d.exams.slice().reverse().forEach(function (e) {
         tb.appendChild(h('<tr><td>' + new Date(e.date).toLocaleString('en-GB') + '</td>' +
+          '<td>' + esc(e.title || 'Mock test') + '</td>' +
           '<td class="k">' + Math.round(e.score * 100) + '%</td>' +
           '<td>' + e.points + ' / ' + e.maxPoints + '</td><td>' + mmss(e.seconds) + '</td></tr>'));
       });
@@ -891,11 +989,14 @@
       var card = h('<div class="card" style="overflow:hidden"></div>');
       card.appendChild(t);
       page.appendChild(card);
+    } else if (examLevel) {
+      page.appendChild(h('<div class="card empty">No mock test sat yet. All ' + examLevel.papers.length +
+        ' papers are open — start with paper 1, which explains every answer in full.</div>'));
     }
 
     var review = reviewQueue();
     page.appendChild(h('<h3 style="margin:22px 0 10px;font-size:16px">Worth revisiting — ' + review.length + '</h3>'));
-    if (!review.length) page.appendChild(h('<div class="card empty">Nothing outstanding. Good moment for the mock test.</div>'));
+    if (!review.length) page.appendChild(h('<div class="card empty">Nothing outstanding. Good moment for a mock test.</div>'));
     else {
       var list = h('<div class="review-list"></div>');
       review.forEach(function (r) {
@@ -914,9 +1015,10 @@
       '<button class="btn" id="btn-import">Load from a file</button>' +
       '<button class="btn btn-ghost" id="btn-wipe">Erase everything</button></div>'));
     page.appendChild(h('<div style="margin-top:10px;font-size:12.5px;color:var(--muted)">' +
-      (Store.persistent ? 'Progress is kept in this browser and never leaves your machine. ' +
+      (Store.persistent ? 'Progress is saved to ' + esc(Store.storedIn) + ' and never leaves your machine. ' +
         'Erasing is the only thing that removes it — no task, no failed attempt and no mock test ever does.'
-        : 'Warning: this browser will not let the page save anything, so progress disappears when you close it.') +
+        : 'Warning: nothing can be saved here, so progress disappears when you close this window. ' +
+          'Launch the app through ExcelTrainer.app or run.sh to have it written to a file.') +
       '</div>'));
     show(page);
 
@@ -982,7 +1084,7 @@
       document.querySelector('.mainnav [data-nav="stats"]').classList.add('active');
       return renderStats();
     }
-    if (parts[0] === 'level' && parts[1]) return renderLevel(parts[1]);
+    if (parts[0] === 'level' && parts[1]) return renderLevel(parts[1], parts[2]);
     if (parts.length === 2) return renderTask(parts[0], parts[1]);
     if (parts.length === 1) return renderLevel(parts[0]);
     renderHome();
@@ -998,7 +1100,10 @@
   });
   window.addEventListener('hashchange', route);
 
-  Store.init();
-  updateHeader();
-  route();
+  // The store may have to ask the native window or the local server for the
+  // progress file, so the first screen is drawn once the answer is in.
+  Store.init(function () {
+    updateHeader();
+    route();
+  });
 })(typeof self !== 'undefined' ? self : this);

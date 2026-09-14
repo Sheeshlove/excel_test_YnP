@@ -76,10 +76,12 @@ else
 fi
 
 # --- readiness check ---------------------------------------------------------
-if command -v python3 >/dev/null 2>&1; then
-  echo "  ok: python3 found - progress will be saved"
+PROGRESS="$HOME/Library/Application Support/ExcelTrainer/progress.json"
+if command -v swiftc >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1; then
+  echo "  ok: progress will be saved to $PROGRESS"
 else
-  echo "  !! python3 not found. Install the Xcode Command Line Tools:"
+  echo "  !! neither swiftc nor python3 was found, so progress can only be kept"
+  echo "     by the browser. Install the Xcode Command Line Tools:"
   echo "    xcode-select --install"
 fi
 
