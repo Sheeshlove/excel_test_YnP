@@ -9,6 +9,7 @@
     "test:curriculum": "node tests/curriculum.test.js",
     "test:ui": "node tests/ui.test.js",
     "test:mobile": "node tests/mobile.test.js",
+    "test:progress": "node tests/progress.test.js",
     "start": "./run.sh",
     "build": "./build_app.sh"
   },

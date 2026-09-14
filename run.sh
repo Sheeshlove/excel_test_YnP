@@ -22,9 +22,11 @@ for _ in $(seq 1 20); do
   sleep 0.1
 done
 [ -z "$PORT" ] && { echo "Could not start the local server"; exit 1; }
+PROGRESS="$(sed -n 2p "$PORTFILE" 2>/dev/null)"
 
 URL="http://127.0.0.1:$PORT/index.html"
 echo "Excel Trainer is running at $URL"
+[ -n "$PROGRESS" ] && echo "Progress is saved to $PROGRESS"
 echo "Press Ctrl+C to stop."
 
 if [ "$(uname)" = "Darwin" ]; then

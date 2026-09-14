@@ -212,6 +212,7 @@ npm test           # runs everything
 | `tests/formula.test.js` | 122 checks on the engine, every expected value verified against Excel's behaviour |
 | `tests/curriculum.test.js` | 3,466 checks: every task's reference answer solves it, raises no Excel error, and an untouched sheet fails; every address named in a task exists; every task has an explanation; the mock test matches the published 20-question / 60-minute format |
 | `tests/ui.test.js` | 65 checks in a real Chromium: typing formulas, `⌘D`, `⌘T`, `⌘Z`, sorting, filtering with `SUBTOTAL`, building and marking pivot tables, the explanation panel, the timed mock test, the guarantee that a failed retry never lowers a score, and all 83 tasks opening cleanly |
+| `tests/progress.test.js` | 30 checks against the real Python server and a real file: answers reaching the file, progress surviving a wiped browser and a changed port, two copies merging instead of overwriting, a stale write being unable to undo a solved task, the backup, the atomic write, and the graceful fallback when no server is there |
 | `tests/mobile.test.js` | 49 checks on an emulated iPhone: the touch toolbar, one-tap fill, the `$` button, filtering and pivot building by touch, the home screen manifest and icons, and the whole app loading with the network switched off |
 
 ### Layout
@@ -270,8 +271,38 @@ cell address mentioned in the wording actually exists.
 
 ---
 
-## Your data
+## Where your progress is kept
 
-Progress is stored in the app's own browser storage and never leaves your
-machine. The Progress page can export it to a file and load it back, for
-instance to move it to another computer.
+On a Mac, launching through `ExcelTrainer.app` or `run.sh` starts a small local
+server, and that server writes your progress to a real file:
+
+```
+~/Library/Application Support/ExcelTrainer/progress.json
+```
+
+Every answer is written there a moment after you give it, and the previous
+version is kept alongside as `progress.backup.json`. The file survives clearing
+the browser, switching browsers, and rebuilding the app — it is a plain JSON
+file you can back up or copy to another machine. The Progress page shows the
+exact path and when it was last written.
+
+The file is written the safe way round: the new content goes to a temporary file
+first and is then renamed over the target, so an interrupted save can never
+leave the progress file missing or half-written. Writes are also merged rather
+than replaced, so two windows open at once cannot undo each other's work.
+
+Browser storage is still used as a fast local mirror, and it is all there is when
+the app runs without the server — on GitHub Pages, or as a home screen app on a
+phone. In that case use **Progress → Export to a file** for a backup.
+
+**Importing merges, it never overwrites.** For every task the better attempt is
+kept, so carrying progress over from your phone can only ever add to what you
+already have.
+
+### Why a fixed port matters
+
+Browser storage is tied to the exact origin, and an origin includes the port.
+The launcher used to hand out a random free port on every start, which quietly
+gave the app a brand new, empty storage each time. It now takes a fixed port
+(47321, or the next free one after it), and the file on disk is the copy that
+really matters.

@@ -4,3 +4,5 @@ ExcelTrainer.app/
 *.iconset/
 .DS_Store
 ios/Web/
+__pycache__/
+*.pyc

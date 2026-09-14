@@ -95,9 +95,17 @@ survives closing the app. Two things to know:
 * iOS can clear the storage of a web app that has not been opened for a very
   long time.
 
-So before anything important, use **Progress → Save progress to a file**. On iOS
-that lands in Files, and **Load from a file** reads it back — which is also how
-you move progress between the Mac and the phone.
+So before anything important, use **Progress → Export to a file**. On iOS that
+lands in Files, and **Import from a file** reads it back.
+
+Moving progress between the Mac and the phone works the same way, and it is
+safe in both directions: importing **merges** rather than overwrites, keeping
+the better attempt at every task. So you can practise on the train, export,
+import on the Mac, and nothing is lost either side.
+
+On the Mac itself there is no need for any of this — launched through
+`ExcelTrainer.app` or `run.sh`, the app writes progress to
+`~/Library/Application Support/ExcelTrainer/progress.json` continuously.
 
 ---
 

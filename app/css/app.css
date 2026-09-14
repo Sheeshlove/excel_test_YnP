@@ -584,3 +584,12 @@ body.is-touch .touch-tools, body.is-narrow .touch-tools {
   .tt-btn { padding: 9px 10px; font-size: 12.5px; }
   .stat-grid { grid-template-columns: 1fr; }
 }
+
+/* where progress is being saved */
+.save-status { padding: 14px 16px; font-size: 13px; line-height: 1.6; display: grid; gap: 8px; }
+.save-status.ok { border-color: #bfe3d3; background: var(--ok-soft); }
+.save-status code {
+  font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,.75);
+  padding: 6px 9px; border-radius: 6px; word-break: break-all; color: #35506e;
+}
+.save-when { font-size: 12px; color: var(--muted); }

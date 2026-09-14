@@ -354,7 +354,12 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' 
   await page.waitForSelector('.dojo-why');
   check(await page.locator('.opt.correct').count() === 1, 'the dojo marks the right answer');
 
-  check(errors.length === 0, 'no console errors: ' + errors.slice(0, 3).join(' | '));
+  // Probing for the local save server on a plain static host logs a 404 and is
+  // expected; tests/progress.test.js covers that path properly.
+  const realErrors = errors.filter(e => !/Failed to load resource/.test(e));
+  check(realErrors.length === 0, 'no console errors: ' + realErrors.slice(0, 3).join(' | '));
+  check(await page.evaluate(() => window.XLStore.disk.available) === false,
+    'with no save server the app quietly falls back to browser storage');
 
   await browser.close();
   srv.close();

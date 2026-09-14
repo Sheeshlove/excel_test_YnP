@@ -928,16 +928,51 @@
     }
 
     page.appendChild(h('<h3 style="margin:26px 0 10px;font-size:16px">Your data</h3>'));
-    page.appendChild(h('<div class="panel-actions">' +
-      '<button class="btn" id="btn-export">Save progress to a file</button>' +
-      '<button class="btn" id="btn-import">Load from a file</button>' +
+
+    var d2 = Store.disk;
+    if (d2.available) {
+      page.appendChild(h('<div class="card save-status ok">' +
+        '<div><b>Saved to a file on this Mac.</b> Every answer is written to disk a moment after ' +
+        'you give it, so progress survives closing the app, clearing the browser, or rebuilding it.</div>' +
+        '<code>' + esc(d2.file || '') + '</code>' +
+        '<div class="save-when" id="save-when">' +
+        (d2.lastSaved ? 'Last written at ' + d2.lastSaved.toLocaleTimeString('en-GB') : 'Nothing new to write') +
+        '</div></div>'));
+    } else {
+      page.appendChild(h('<div class="card save-status">' +
+        '<div><b>Saved in this browser.</b> ' +
+        (Store.persistent
+          ? 'That is enough for day-to-day use, but it is tied to this browser on this device. ' +
+            'Launch the app through ExcelTrainer.app or run.sh and it will also be written to a file on disk.'
+          : 'This browser will not let the page store anything, so progress disappears when you close it. ' +
+            'Export to a file to keep it.') +
+        '</div></div>'));
+    }
+
+    page.appendChild(h('<div class="panel-actions" style="margin-top:12px">' +
+      (d2.available ? '<button class="btn" id="btn-savenow">Write to the file now</button>' : '') +
+      '<button class="btn" id="btn-export">Export to a file</button>' +
+      '<button class="btn" id="btn-import">Import from a file</button>' +
       '<button class="btn btn-ghost" id="btn-wipe">Erase everything</button></div>'));
     page.appendChild(h('<div style="margin-top:10px;font-size:12.5px;color:var(--muted)">' +
-      (Store.persistent ? 'Progress is kept in this browser and never leaves your machine. ' +
-        'Erasing is the only thing that removes it — no task, no failed attempt and no mock test ever does.'
-        : 'Warning: this browser will not let the page save anything, so progress disappears when you close it.') +
+      'Importing merges with what you already have: for every task the better attempt is kept, ' +
+      'so bringing progress over from your phone can never cost you points. ' +
+      'Erasing is the only thing that removes progress — no task, no failed attempt and no mock test ever does.' +
       '</div>'));
     show(page);
+
+    var saveNowBtn = document.getElementById('btn-savenow');
+    if (saveNowBtn) {
+      saveNowBtn.addEventListener('click', function () {
+        saveNowBtn.disabled = true;
+        Store.saveNow().then(function (ok) {
+          saveNowBtn.disabled = false;
+          toast(ok ? 'Written to ' + (Store.disk.file || 'disk') : 'Could not write the file');
+          var when = document.getElementById('save-when');
+          if (when && ok) when.textContent = 'Last written at ' + new Date().toLocaleTimeString('en-GB');
+        });
+      });
+    }
 
     document.getElementById('btn-export').addEventListener('click', function () {
       var blob = new Blob([Store.exportJSON()], { type: 'application/json' });
@@ -954,8 +989,12 @@
         if (!f) return;
         var rd = new FileReader();
         rd.onload = function () {
-          try { Store.importJSON(rd.result); updateHeader(); toast('Progress loaded'); renderStats(); }
-          catch (err) { toast('That file could not be read'); }
+          try {
+            Store.importJSON(rd.result, true);   // merge, never overwrite
+            updateHeader();
+            toast('Progress merged in — the better attempt at every task was kept');
+            renderStats();
+          } catch (err) { toast('That file could not be read'); }
         };
         rd.readAsText(f);
       };
@@ -1026,4 +1065,19 @@
   Store.init();
   updateHeader();
   route();
+
+  // If the app was launched through ExcelTrainer.app or run.sh there is a local
+  // server behind it that keeps progress in a real file. Pick that copy up,
+  // merge it with whatever this browser holds, and redraw if anything changed.
+  Store.connectDisk(function () {
+    updateHeader();
+    if (!state.exam) route();
+    toast('Progress restored from your saved file');
+  });
+
+  // Anything not yet written goes out the moment the window is hidden or closed.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') Store.saveNow();
+  });
+  window.addEventListener('pagehide', function () { Store.saveNow(); });
 })(typeof self !== 'undefined' ? self : this);

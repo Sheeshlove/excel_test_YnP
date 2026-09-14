@@ -54,11 +54,152 @@
     catch (e) { memory = data; }
   }
 
+  /* ------------------------------------------------------- merging two copies */
+  // Called when the phone and the Mac, or two browsers, both hold progress.
+  // Taking the newer copy wholesale would throw away whatever was done on the
+  // other one, so every field is merged in the direction that cannot lose work.
+  function merge(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    var out = Object.assign(blank(), a);
+
+    out.tasks = {};
+    var ids = {};
+    Object.keys(a.tasks || {}).forEach(function (k) { ids[k] = 1; });
+    Object.keys(b.tasks || {}).forEach(function (k) { ids[k] = 1; });
+    Object.keys(ids).forEach(function (id) {
+      var x = (a.tasks || {})[id], y = (b.tasks || {})[id];
+      if (!x) { out.tasks[id] = y; return; }
+      if (!y) { out.tasks[id] = x; return; }
+      var best = (y.best > x.best) ? y : x;          // the better attempt wins
+      out.tasks[id] = {
+        best: Math.max(x.best || 0, y.best || 0),
+        attempts: Math.max(x.attempts || 0, y.attempts || 0),
+        // a hint or a revealed answer stays on the record of whichever copy
+        // earned the better score, so the points cannot be laundered away
+        hinted: best.hinted,
+        seenSolution: best.seenSolution,
+        solvedAt: x.solvedAt || y.solvedAt
+      };
+    });
+
+    out.drills = {
+      total: Math.max((a.drills || {}).total || 0, (b.drills || {}).total || 0),
+      correct: Math.max((a.drills || {}).correct || 0, (b.drills || {}).correct || 0),
+      bestStreak: Math.max((a.drills || {}).bestStreak || 0, (b.drills || {}).bestStreak || 0)
+    };
+
+    var exams = {}, list = (a.exams || []).concat(b.exams || []);
+    list.forEach(function (e) { if (e && e.date) exams[e.date] = e; });
+    out.exams = Object.keys(exams).sort().map(function (k) { return exams[k]; });
+
+    out.xp = Math.max(a.xp || 0, b.xp || 0);
+
+    var sa = (a.streak || {}), sb = (b.streak || {});
+    out.streak = ((sb.lastDay || '') > (sa.lastDay || '')) ? sb : sa;
+    if (out.streak) out.streak.days = Math.max(sa.days || 0, sb.days || 0);
+
+    out.savedAt = new Date().toISOString();
+    return out;
+  }
+
+  /* ------------------------------------------ the copy that lives on disk ----
+   * When the app is launched through ExcelTrainer.app or run.sh there is a
+   * small local server behind it, and that server keeps progress in a real
+   * file. That file is the durable copy: it survives a cleared browser profile,
+   * a different browser, and the app being rebuilt. On GitHub Pages or on a
+   * phone there is no server, the calls fail quietly, and browser storage is
+   * all there is.
+   * ------------------------------------------------------------------------ */
+  // `ready` guards a race that cost real progress: the app flushes during
+  // start-up, and without the guard that flush could push the browser's copy
+  // over the file before the file had even been read and merged in.
+  var disk = { available: false, ready: false, file: null, lastSaved: null, pending: null, error: null };
+
+  function apiUrl(path) {
+    // relative on purpose: the port can change between launches
+    return new URL(path, window.location.href).toString();
+  }
+
+  function pushToDisk(data, immediate) {
+    if (!disk.available || typeof fetch !== 'function') return Promise.resolve(false);
+    return fetch(apiUrl('api/progress'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      keepalive: !!immediate
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      disk.lastSaved = new Date();
+      disk.error = null;
+      return true;
+    }).catch(function (e) {
+      disk.error = e.message;
+      return false;
+    });
+  }
+
   var Store = {
     persistent: HAS_LS,
     data: null,
+    disk: disk,
     init: function () { this.data = load(); this.touchDay(); return this.data; },
-    flush: function () { save(this.data); },
+
+    flush: function () {
+      this.data.savedAt = new Date().toISOString();
+      save(this.data);
+      this.scheduleDiskSave();
+    },
+
+    // Disk writes are debounced: a burst of answers produces one write.
+    scheduleDiskSave: function () {
+      var self = this;
+      if (!disk.available || !disk.ready) return;
+      clearTimeout(disk.pending);
+      disk.pending = setTimeout(function () { pushToDisk(self.data); }, 400);
+    },
+
+    saveNow: function () {
+      clearTimeout(disk.pending);
+      if (!disk.ready) return Promise.resolve(false);
+      return pushToDisk(this.data, true);
+    },
+
+    // Reads the file, merges it with what the browser holds, and writes the
+    // result back to both. onAdopt fires when the merge changed anything, so
+    // the screen can be redrawn.
+    connectDisk: function (onAdopt) {
+      var self = this;
+      if (typeof fetch !== 'function') return;
+      // The local server only ever lives on this machine. Probing for it
+      // anywhere else would just log a 404 in everybody's console.
+      var host = window.location.hostname;
+      if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') return;
+      fetch(apiUrl('api/progress'), { headers: { 'Accept': 'application/json' } })
+        .then(function (r) {
+          if (!r.ok) throw new Error('no local server');
+          return r.json();
+        })
+        .then(function (res) {
+          disk.available = true;
+          disk.file = res.file || null;
+          if (!res.found || !res.data) {
+            disk.ready = true;                       // nothing on disk yet
+            return pushToDisk(self.data);
+          }
+          var before = JSON.stringify(self.data);
+          var merged = merge(self.data, res.data);
+          self.data = merged;
+          save(merged);
+          disk.ready = true;                         // only now may writes go out
+          return pushToDisk(merged).then(function () {
+            if (before !== JSON.stringify(merged) && onAdopt) onAdopt();
+          });
+        })
+        .catch(function () {
+          disk.available = false;       // no server: browser storage only
+        });
+    },
 
     touchDay: function () {
       var s = this.data.streak, t = today();
@@ -118,11 +259,17 @@
 
     reset: function () { this.data = blank(); this.flush(); },
 
+    mergeIn: function (incoming) {
+      this.data = merge(this.data, incoming);
+      this.flush();
+      return this.data;
+    },
+
     exportJSON: function () { return JSON.stringify(this.data, null, 2); },
-    importJSON: function (text) {
+    importJSON: function (text, mergeInstead) {
       var d = JSON.parse(text);
       if (!d || d.version !== 1) throw new Error('That file is not a progress export');
-      this.data = Object.assign(blank(), d);
+      this.data = mergeInstead ? merge(this.data, d) : Object.assign(blank(), d);
       this.flush();
     }
   };

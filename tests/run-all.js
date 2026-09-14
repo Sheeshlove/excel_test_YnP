@@ -6,7 +6,8 @@ const suites = [
   ['Formula engine', 'formula.test.js'],
   ['Training programme', 'curriculum.test.js'],
   ['Interface (real browser)', 'ui.test.js'],
-  ['iPhone (touch, offline, PWA)', 'mobile.test.js']
+  ['iPhone (touch, offline, PWA)', 'mobile.test.js'],
+  ['Saving progress to disk', 'progress.test.js']
 ];
 
 let failed = 0;
