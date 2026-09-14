@@ -1,0 +1,56 @@
+# Publishes the trainer to GitHub Pages, which is what the iPhone installs from.
+#
+# One-off setup in the repository: Settings > Pages > Build and deployment >
+# Source = "GitHub Actions". After that every push to the branches below
+# republishes the app, and the phone picks up the new version on next launch.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - claude/iphone-app
+      - claude/dreamy-euler-cgmy9m
+    paths:
+      - 'app/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the app files are all present
+        run: |
+          test -f app/index.html
+          test -f app/manifest.webmanifest
+          test -f app/sw.js
+          test -f app/icons/icon-180.png
+          node -e "JSON.parse(require('fs').readFileSync('app/manifest.webmanifest','utf8'))"
+          echo "app/ looks deployable"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

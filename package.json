@@ -8,6 +8,7 @@
     "test:formula": "node tests/formula.test.js",
     "test:curriculum": "node tests/curriculum.test.js",
     "test:ui": "node tests/ui.test.js",
+    "test:mobile": "node tests/mobile.test.js",
     "start": "./run.sh",
     "build": "./build_app.sh"
   },

@@ -430,3 +430,157 @@ tr.pt-grand td, tr.pt-grand th { background: #eef2f8; font-weight: 700; }
   .pivot-wrap { grid-template-columns: 1fr; }
   .pivot-areas { grid-template-columns: 1fr 1fr; }
 }
+
+/* ========================================================== iPhone layout ==
+   The trainer is a spreadsheet, so on a phone the sheet gets the screen and
+   everything else gets out of the way. Safe-area insets keep content clear of
+   the notch and the home bar when it runs as a home screen app.
+   ========================================================================== */
+
+/* the bottom tab bar only exists on narrow screens */
+.tabbar { display: none; }
+
+.touch-tools { display: none; }
+body.is-touch .touch-tools, body.is-narrow .touch-tools {
+  display: flex; gap: 6px; padding: 7px 10px; overflow-x: auto;
+  border-bottom: 1px solid var(--line); background: #fbfcfe; -webkit-overflow-scrolling: touch;
+}
+.tt-btn {
+  flex: 0 0 auto; border: 1px solid var(--line); background: #fff; border-radius: 9px;
+  padding: 9px 13px; font-size: 13.5px; font-weight: 550; color: var(--ink);
+  touch-action: manipulation; min-height: 38px;
+}
+.tt-btn:active { background: var(--accent-soft); border-color: var(--accent); }
+.tt-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tt-btn.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+/* the row of awkward characters, floated above the on-screen keyboard */
+.assist-row {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 300;
+  display: flex; align-items: stretch; gap: 6px; padding: 6px 8px;
+  background: #e9edf3; border-top: 1px solid var(--line);
+  padding-bottom: calc(6px + env(safe-area-inset-bottom));
+  box-shadow: 0 -4px 14px rgba(16,32,56,.10);
+}
+.assist-row[hidden] { display: none !important; }
+.assist-scroll {
+  display: flex; gap: 6px; overflow-x: auto; flex: 1; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.assist-scroll::-webkit-scrollbar { display: none; }
+.assist-key {
+  flex: 0 0 auto; min-width: 40px; min-height: 38px; padding: 0 11px;
+  border: 1px solid #c9d2de; border-bottom-width: 2px; border-radius: 8px; background: #fff;
+  font-family: var(--mono); font-size: 15px; color: var(--navy); touch-action: manipulation;
+}
+.assist-key.wide { font-size: 12.5px; }
+.assist-key:active { background: var(--accent-soft); }
+.assist-done {
+  flex: 0 0 auto; border: 0; background: var(--accent); color: #fff; border-radius: 8px;
+  padding: 0 14px; font-size: 13.5px; font-weight: 600; touch-action: manipulation;
+}
+
+@media (max-width: 760px) {
+  html, body { height: 100%; }
+  #app { height: 100vh; }
+  @supports (height: 100dvh) { #app { height: 100dvh; } }
+  main { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  /* --- header --- */
+  .topbar {
+    gap: 10px; padding: 8px 14px;
+    padding-top: calc(8px + env(safe-area-inset-top));
+  }
+  .brand-text small { display: none; }
+  .brand-text b { font-size: 14px; }
+  .logo { width: 30px; height: 30px; font-size: 11px; border-radius: 8px; }
+  .mainnav { display: none; }
+  .xpbox { margin-left: auto; padding-left: 0; border-left: 0; }
+  .xp-line { font-size: 14px; }
+  .xp-sub { font-size: 10.5px; }
+
+  /* --- bottom tabs, hidden while a task is open so the sheet gets the room --- */
+  .tabbar {
+    display: flex; position: sticky; bottom: 0; z-index: 30;
+    background: #fff; border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tabbar button {
+    flex: 1; border: 0; background: transparent; padding: 8px 2px 7px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-size: 10.5px; color: var(--muted); touch-action: manipulation;
+  }
+  .tabbar button .tb-i { font-size: 17px; line-height: 1; }
+  .tabbar button.active { color: var(--accent); font-weight: 600; }
+  body.on-task .tabbar { display: none; }
+
+  /* --- pages --- */
+  .page { padding: 16px 14px 28px; }
+  .page-head h1 { font-size: 21px; }
+  .hero { flex-direction: column; align-items: stretch; gap: 14px; padding: 18px 16px; }
+  .hero h1 { font-size: 19px; }
+  .hero-actions { flex-direction: column; }
+  .hero-actions .btn { width: 100%; }
+  .levels { grid-template-columns: 1fr; }
+  .stat-grid { grid-template-columns: 1fr 1fr; }
+  .ref-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .ref-tabs button { flex: 0 0 auto; }
+  table.ref th, table.ref td { padding: 8px 10px; font-size: 12.5px; }
+
+  /* --- the task workspace fills the screen --- */
+  body.on-task main { overflow: hidden; }
+  .workspace { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: 100%; }
+  .task-panel {
+    border-right: 0; border-bottom: 1px solid var(--line);
+    padding: 12px 14px; gap: 10px; max-height: 42vh; overflow-y: auto;
+  }
+  .task-panel h2 { font-size: 16px; }
+  .brief { font-size: 13px; }
+  .crumbs { font-size: 11.5px; }
+  .panel-actions .btn { flex: 1 1 auto; min-height: 40px; touch-action: manipulation; }
+  .shortcut-legend { font-size: 11.5px; line-height: 1.5; }
+  .workspace.panel-collapsed .task-panel > *:not(.task-head) { display: none; }
+  .workspace.panel-collapsed .task-panel { max-height: none; padding-bottom: 8px; }
+
+  .task-head { display: flex; align-items: center; gap: 8px; }
+  .task-head h2 { flex: 1; margin: 0; }
+  .panel-toggle {
+    border: 1px solid var(--line); background: #fff; border-radius: 8px;
+    width: 34px; height: 34px; font-size: 14px; color: var(--muted); flex: 0 0 auto;
+    touch-action: manipulation;
+  }
+
+  .sheet-area { min-height: 0; }
+  .fb-addr { width: 74px; font-size: 12px; }
+  .fb-input { font-size: 16px; padding: 10px 10px; }   /* 16px stops iOS zooming in */
+  .statusbar { font-size: 11.5px; padding: 5px 10px; gap: 12px; }
+  .statusbar .spacer { display: none; }
+
+  /* fatter rows so a finger can hit a cell */
+  body.is-touch table.sheet th, body.is-touch table.sheet td { height: 32px; }
+  body.is-touch table.sheet td .cv { padding: 6px 7px; }
+  table.sheet td .cell-input { font-size: 16px; }
+
+  /* --- pivot builder --- */
+  #pane-pivot { padding: 12px; }
+  .pivot-wrap { grid-template-columns: 1fr; }
+  .pivot-areas { grid-template-columns: 1fr; }
+  .pf-row { padding: 8px 8px 8px 12px; }
+  .pf-btn { padding: 6px 8px; font-size: 11.5px; min-height: 32px; }
+  .work-tabs button { flex: 1; }
+
+  /* --- dojo --- */
+  .dojo-card { padding: 18px 16px; }
+  .dojo-keys { font-size: 24px; }
+  .opt { padding: 14px 14px; }
+
+  /* --- explanation --- */
+  .explain { padding: 12px 13px; font-size: 12.5px; }
+  .ex-steps { padding: 4px 8px 10px; overflow-x: auto; }
+}
+
+/* very small phones */
+@media (max-width: 400px) {
+  .tt-btn { padding: 9px 10px; font-size: 12.5px; }
+  .stat-grid { grid-template-columns: 1fr; }
+}

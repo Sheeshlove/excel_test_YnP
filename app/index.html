@@ -2,7 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- viewport-fit=cover lets the app paint under the notch and the home bar;
+       pinch zoom is deliberately left enabled, it is useful on a spreadsheet -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f2540">
+  <meta name="color-scheme" content="light">
+
+  <!-- iOS home screen app -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Excel Trainer">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="icons/icon-120.png">
   <title>Excel Trainer · Yakov &amp; Partners test preparation</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f2540'/%3E%3Ctext x='32' y='43' font-size='30' font-family='Helvetica,Arial' font-weight='bold' fill='%23fff' text-anchor='middle'%3EX%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/app.css">
@@ -27,6 +43,12 @@
         <div class="xp-line"><b id="xp-value">0</b> XP</div>
         <div class="xp-sub"><span id="streak-value">0 days in a row</span></div>
       </div>
+      <nav class="tabbar" aria-label="Sections">
+        <button data-nav="home"><span class="tb-i">▦</span>Programme</button>
+        <button data-nav="dojo"><span class="tb-i">◎</span>Dojo</button>
+        <button data-nav="reference"><span class="tb-i">≡</span>Reference</button>
+        <button data-nav="stats"><span class="tb-i">▲</span>Progress</button>
+      </nav>
     </header>
     <main id="view"></main>
     <div id="toast" class="toast" hidden></div>
@@ -42,6 +64,18 @@
   <script src="js/storage.js"></script>
   <script src="js/grid.js"></script>
   <script src="js/pivotui.js"></script>
+  <script src="js/touch.js"></script>
   <script src="js/app.js"></script>
+  <script>
+    // Registering the service worker is what makes the home screen app work
+    // offline. It needs a secure context: https, or 127.0.0.1 while developing.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {
+          /* opened as a plain file: the app still runs, just without offline */
+        });
+      });
+    }
+  </script>
 </body>
 </html>

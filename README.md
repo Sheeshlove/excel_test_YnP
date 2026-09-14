@@ -28,6 +28,17 @@ The firm describes the test as follows, and the app mirrors it:
 
 ---
 
+## On an iPhone
+
+The trainer also installs on a phone as a home screen app — own icon, no Safari
+bars, works with no network. The keyboard shortcuts the tasks rely on are
+replaced by buttons (**Fill ↓**, **Fill →**, **$**, **Filter**), and a strip of
+the characters iOS buries — `= $ : , ( ) "` — floats above the keyboard.
+
+<img src="docs/screenshot-iphone.png" alt="Solving a task on an iPhone" width="330">
+
+Full instructions, including the native Xcode route: **[docs/IPHONE.md](docs/IPHONE.md)**.
+
 ## Quick start
 
 ```bash
@@ -201,6 +212,7 @@ npm test           # runs everything
 | `tests/formula.test.js` | 122 checks on the engine, every expected value verified against Excel's behaviour |
 | `tests/curriculum.test.js` | 3,466 checks: every task's reference answer solves it, raises no Excel error, and an untouched sheet fails; every address named in a task exists; every task has an explanation; the mock test matches the published 20-question / 60-minute format |
 | `tests/ui.test.js` | 65 checks in a real Chromium: typing formulas, `⌘D`, `⌘T`, `⌘Z`, sorting, filtering with `SUBTOTAL`, building and marking pivot tables, the explanation panel, the timed mock test, the guarantee that a failed retry never lowers a score, and all 83 tasks opening cleanly |
+| `tests/mobile.test.js` | 49 checks on an emulated iPhone: the touch toolbar, one-tap fill, the `$` button, filtering and pivot building by touch, the home screen manifest and icons, and the whole app loading with the network switched off |
 
 ### Layout
 
@@ -217,7 +229,11 @@ app/                 the application (also opens as a plain web page)
   js/pivotui.js      the pivot builder
   js/app.js          screens and navigation
   js/storage.js      progress
+  js/touch.js        the touch toolbar and the keyboard assist row
+  sw.js              service worker: the app works offline once loaded
+  manifest.webmanifest  home screen app metadata
 packaging/           server, launcher, native Swift window, icon
+ios/                 the iOS wrapper and how to build it
 build_app.sh         builds ExcelTrainer.app
 run.sh               runs it without building a bundle
 tests/               the checks

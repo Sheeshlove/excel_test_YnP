@@ -565,6 +565,48 @@
     if (filled) this.flash(filled + ' cell' + (filled === 1 ? '' : 's') + ' filled');
   };
 
+  // On a phone there is no ⌘D and no way to drag out a range, so one tap has to
+  // do what double-clicking the fill handle does in Excel: run the formula down
+  // (or across) as far as the neighbouring cells expect an answer.
+  Grid.prototype.smartFill = function (dir) {
+    var rng = this.range();
+    var single = rng.r1 === rng.r2 && rng.c1 === rng.c2;
+    if (single) {
+      var r = rng.r1, c = rng.c1;
+      if (this.sheet.raw(r, c) === '') {
+        this.flash('Put a formula in this cell first, then fill');
+        return;
+      }
+      if (dir === 'down') {
+        var r2 = r;
+        while (r2 + 1 < this.rows && this.canEdit(r2 + 1, c)) r2++;
+        if (r2 === r) { this.flash('Nothing below this cell to fill into'); return; }
+        this.anchor = { r: r, c: c };
+        this.sel = { r: r2, c: c };
+      } else {
+        var c2 = c;
+        while (c2 + 1 < this.cols && this.canEdit(r, c2 + 1)) c2++;
+        if (c2 === c) { this.flash('Nothing to the right of this cell to fill into'); return; }
+        this.anchor = { r: r, c: c };
+        this.sel = { r: r, c: c2 };
+      }
+      this.paint();
+    }
+    this.fill(dir);
+  };
+
+  // The ⌘T cycle, usable from any text field — on a phone the formula bar is
+  // where people type, not the cell itself.
+  Grid.prototype.toggleAnchorIn = function (input) {
+    if (!input || typeof input.selectionStart !== 'number') return false;
+    var res = cycleAnchors(input.value, input.selectionStart);
+    if (!res) return false;
+    input.value = res.text;
+    input.setSelectionRange(res.caret, res.caret);
+    this.onChange({ type: 'editing', text: input.value });
+    return true;
+  };
+
   Grid.prototype.copy = function () {
     var rng = this.range(), data = [];
     for (var r = rng.r1; r <= rng.r2; r++) {

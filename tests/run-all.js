@@ -5,7 +5,8 @@ const path = require('path');
 const suites = [
   ['Formula engine', 'formula.test.js'],
   ['Training programme', 'curriculum.test.js'],
-  ['Interface (real browser)', 'ui.test.js']
+  ['Interface (real browser)', 'ui.test.js'],
+  ['iPhone (touch, offline, PWA)', 'mobile.test.js']
 ];
 
 let failed = 0;

@@ -268,11 +268,15 @@
     }
 
     var idx = lv.tasks.indexOf(task);
+    var touch = !!(root.XLTouch && root.XLTouch.enabled());
     var wrap = h('<div class="workspace"></div>');
     var panel = h('<aside class="task-panel"></aside>');
     panel.appendChild(h('<div class="crumbs"><button data-nav="home">Programme</button> › ' +
       '<button data-level="' + lv.id + '">Level ' + lv.id + '</button> › Question ' + (idx + 1) + ' of ' + lv.tasks.length + '</div>'));
-    panel.appendChild(h('<h2>' + esc(task.title) + '</h2>'));
+    // On a phone the brief can be folded away so the sheet gets the whole screen.
+    var head = h('<div class="task-head"><h2>' + esc(task.title) + '</h2>' +
+      '<button class="panel-toggle" title="Hide or show the question">▴</button></div>');
+    panel.appendChild(head);
     panel.appendChild(h('<div class="brief">' + esc(task.brief) + '</div>'));
 
     if (examMode) panel.appendChild(h('<div class="timer" id="exam-timer">—</div>'));
@@ -316,12 +320,15 @@
       });
       panel.appendChild(nav);
     } else {
-      panel.appendChild(h('<div class="shortcut-legend">' +
-        '<span class="kbd">⌘D</span> fill down · <span class="kbd">⌘R</span> fill right<br>' +
-        '<span class="kbd">⌘T</span> toggle $ · <span class="kbd">F2</span> edit cell<br>' +
-        '<span class="kbd">⌘↓</span> jump to edge · <span class="kbd">⌘⇧↓</span> select to edge' +
-        (task.table && !isPivot ? '<br><span class="kbd">⌘⇧F</span> turn the filter on' : '') +
-        '</div>'));
+      panel.appendChild(h(touch
+        ? '<div class="shortcut-legend">Tap a cell to select it, then <b>Edit</b> to type. ' +
+          '<b>Fill ↓</b> runs your formula down the column the way ⌘D does on a Mac.</div>'
+        : '<div class="shortcut-legend">' +
+          '<span class="kbd">⌘D</span> fill down · <span class="kbd">⌘R</span> fill right<br>' +
+          '<span class="kbd">⌘T</span> toggle $ · <span class="kbd">F2</span> edit cell<br>' +
+          '<span class="kbd">⌘↓</span> jump to edge · <span class="kbd">⌘⇧↓</span> select to edge' +
+          (task.table && !isPivot ? '<br><span class="kbd">⌘⇧F</span> turn the filter on' : '') +
+          '</div>'));
     }
     wrap.appendChild(panel);
 
@@ -347,7 +354,7 @@
     var pivotPane = h('<div class="pane" id="pane-pivot"></div>');
     if (isPivot) { area.appendChild(pivotPane); sheetPane.hidden = true; }
     area.appendChild(sheetPane);
-    if (task.table && !isPivot) {
+    if (task.table && !isPivot && !touch) {
       sheetPane.insertBefore(h('<div class="table-tools">' +
         '<button class="btn" id="btn-filter">Turn filter on <span class="kbd">⌘⇧F</span></button>' +
         '<span class="tools-note">Then click the ▾ arrows in the header row to sort or filter.</span>' +
@@ -355,6 +362,12 @@
     }
     wrap.appendChild(area);
     show(wrap);
+
+    var toggle = head.querySelector('.panel-toggle');
+    toggle.addEventListener('click', function () {
+      var collapsed = wrap.classList.toggle('panel-collapsed');
+      toggle.textContent = collapsed ? '▾' : '▴';
+    });
 
     var host = document.getElementById('grid-host');
     var fbAddr = document.getElementById('fb-addr');
@@ -402,6 +415,12 @@
       });
     } else {
       grid.focus();
+    }
+
+    if (touch && !isPivot) {
+      var tools = root.XLTouch.buildToolbar(grid, task);
+      sheetPane.insertBefore(tools, sheetPane.querySelector('.grid-wrap'));
+      root.XLTouch.watchFields(grid);
     }
 
     var filterBtn = document.getElementById('btn-filter');
@@ -961,25 +980,31 @@
     window.scrollTo(0, 0);
   }
   function go(hash) { window.location.hash = '#/' + hash; }
+  function markNav(section) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-nav="' + section + '"]'), function (b) {
+      if (b.tagName === 'BUTTON') b.classList.add('active');
+    });
+  }
 
   function route() {
     var hash = (window.location.hash || '').replace(/^#\/?/, '');
     var parts = hash.split('/').filter(Boolean);
-    Array.prototype.forEach.call(document.querySelectorAll('.mainnav button'), function (b) { b.classList.remove('active'); });
+    Array.prototype.forEach.call(document.querySelectorAll('.mainnav button, .tabbar button'), function (b) { b.classList.remove('active'); });
+    document.body.classList.toggle('on-task', parts.length === 2 && parts[0] !== 'level');
     if (!parts.length || parts[0] === 'home') {
-      document.querySelector('.mainnav [data-nav="home"]').classList.add('active');
+      markNav('home');
       return renderHome();
     }
     if (parts[0] === 'dojo') {
-      document.querySelector('.mainnav [data-nav="dojo"]').classList.add('active');
+      markNav('dojo');
       return renderDojo();
     }
     if (parts[0] === 'reference') {
-      document.querySelector('.mainnav [data-nav="reference"]').classList.add('active');
+      markNav('reference');
       return renderReference();
     }
     if (parts[0] === 'stats') {
-      document.querySelector('.mainnav [data-nav="stats"]').classList.add('active');
+      markNav('stats');
       return renderStats();
     }
     if (parts[0] === 'level' && parts[1]) return renderLevel(parts[1]);

@@ -103,7 +103,37 @@ def write_png(path, data, size):
     open(path, 'wb').write(png)
 
 
+def resize(data, src, dst):
+    """Nearest-neighbour box downscale: good enough for a flat, geometric icon."""
+    out = bytearray(dst * dst * 4)
+    step = src / dst
+    for y in range(dst):
+        for x in range(dst):
+            x0, x1 = int(x * step), max(int(x * step) + 1, int((x + 1) * step))
+            y0, y1 = int(y * step), max(int(y * step) + 1, int((y + 1) * step))
+            r = g = b = a = n = 0
+            for sy in range(y0, min(y1, src)):
+                for sx in range(x0, min(x1, src)):
+                    o = (sy * src + sx) * 4
+                    r += data[o]; g += data[o + 1]; b += data[o + 2]; a += data[o + 3]; n += 1
+            o2 = (y * dst + x) * 4
+            out[o2] = r // n; out[o2 + 1] = g // n; out[o2 + 2] = b // n; out[o2 + 3] = a // n
+    return out
+
+
 if __name__ == '__main__':
-    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), 'icon.png')
-    write_png(out, downsample(build()), S)
-    print('icon written:', out, os.path.getsize(out), 'bytes')
+    args = sys.argv[1:]
+    master = downsample(build())
+    if args and args[0] == '--set':
+        # icon set for the home screen and the web app manifest
+        target = args[1] if len(args) > 1 else os.path.join(os.path.dirname(__file__), '..', 'app', 'icons')
+        os.makedirs(target, exist_ok=True)
+        for size in (1024, 512, 192, 180, 167, 152, 120):
+            data = master if size == S else resize(master, S, size)
+            out = os.path.join(target, 'icon-%d.png' % size)
+            write_png(out, data, size)
+            print('icon written:', out, os.path.getsize(out), 'bytes')
+    else:
+        out = args[0] if args else os.path.join(os.path.dirname(__file__), 'icon.png')
+        write_png(out, master, S)
+        print('icon written:', out, os.path.getsize(out), 'bytes')
