@@ -181,8 +181,10 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' 
   await page.goto(base + '#/1/1.1');
   await page.waitForFunction(() => location.hash === '#/1/1.1');
   await page.waitForSelector('table.sheet');
-  check((await page.locator('td[data-r="1"][data-c="3"] .cv').textContent()) === '1700',
-    'work in progress on another task survives untouched');
+  check((await page.locator('td[data-r="1"][data-c="3"] .cv').textContent()) === '',
+    'opening a task again starts from a clean sheet');
+  check((await page.locator('.task-status.done, .solved-note').count()) > 0,
+    'the clean sheet does not cost the points already earned for it');
 
   /* ---------- level 4: one formula over a whole grid ---------- */
   await page.goto(base + '#/4/4.5');
@@ -365,6 +367,36 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' 
   /* a failed exam must not wipe anything */
   const xpAfterExam = await page.evaluate(() => window.XLStore.data.xp);
   check(xpAfterExam > 0, 'a failed exam does not erase progress');
+
+  /* ---------- entering a test again always starts it over ---------- */
+  await page.goto(base + '#/12/E1');
+  await page.waitForSelector('table.sheet');
+  check((await page.locator('td[data-r="1"][data-c="9"] .cv').textContent()) === '',
+    'a question of a finished paper opens clean, not with the old answer');
+  check(await page.locator('#exam-timer').count() === 0, 'and not inside a sitting');
+
+  await page.goto(base + '#/level/12/M01');
+  await page.waitForSelector('#start-exam');
+  await page.locator('#start-exam').click();
+  await page.waitForSelector('#exam-timer');
+  check((await page.locator('td[data-r="1"][data-c="9"] .cv').textContent()) === '',
+    'starting the paper again gives a clean sheet');
+  check(/(59|60):/.test(await page.locator('#exam-timer').textContent()),
+    'and a full hour again');
+
+  /* walking out of a started sitting ends it, so the next entry is a new attempt */
+  await page.locator('td[data-r="1"][data-c="9"]').click();
+  await page.keyboard.type('12345');
+  await page.keyboard.press('Enter');
+  await page.locator('.mainnav [data-nav="home"]').click();   // the dialog handler accepts
+  await page.waitForSelector('.levels');
+  check((await page.locator('#toast').textContent()).includes('new attempt'),
+    'leaving a sitting says that the next entry starts over');
+  await page.goto(base + '#/12/E1');
+  await page.waitForSelector('table.sheet');
+  check((await page.locator('td[data-r="1"][data-c="9"] .cv').textContent()) === '',
+    'the abandoned answers are gone when the question is opened again');
+  check(await page.locator('#exam-timer').count() === 0, 'and the abandoned clock is not still running');
 
   await page.goto(base + '#/stats');
   await page.waitForSelector('.stat-grid');

@@ -198,10 +198,30 @@ This is deliberate, and the app says so on the home screen:
   cannot crack today never blocks you — skip it and come back.
 * A failed mock test changes nothing except adding a row to your history. Sit any
   paper as often as you like.
-* Work in progress is kept while the app is open, so clicking away from a
-  half-finished task and coming back does not throw it away.
 * The only thing that erases progress is the **Erase everything** button on the
   Progress page, behind a confirmation.
+
+What is *not* kept is the sheet itself — see below.
+
+---
+
+## Every attempt starts from a clean sheet
+
+Open a task and it is blank, every time. What you typed on a previous visit is
+never carried over: leave a half-finished task, come back, and you get the
+question as it was first posed. The same goes for a mock test — opening a paper
+again is a new attempt on empty sheets with a fresh hour on the clock, so a
+score means the same thing every time you sit it.
+
+The one exception is a mock test that is **under way**: moving between its
+twenty questions keeps your answers, because the published format says you may
+work through them in any order. That lasts exactly as long as the sitting does.
+Walk out of the paper and the sitting is over — the app asks first if you have
+answered anything, and says so afterwards.
+
+None of this touches your points. Sheets are cleared; XP, best scores, the
+review list and the mock test history are not, and a cleared sheet can only ever
+let a score go up.
 
 ---
 

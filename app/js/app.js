@@ -9,11 +9,12 @@
 
   var view = document.getElementById('view');
   var state = {
-    grid: null, pivot: null, task: null, level: null, exam: null, timerId: null,
-    // work in progress is kept for the whole session, so clicking away from a
-    // half-finished task and coming back does not throw the work away
-    sheets: {}, pivots: {}
+    grid: null, pivot: null, task: null, level: null, exam: null, timerId: null
   };
+  // Opening a task always starts from a clean sheet: nothing typed on a previous
+  // visit is carried over. The one exception is a mock test that is under way —
+  // moving between its twenty questions has to keep the answers, or the format
+  // would be unusable — and even that lasts only as long as the sitting does.
 
   /* -------------------------------------------------------------- helpers */
   function h(html) {
@@ -135,7 +136,9 @@
       '<div class="card notice">' +
         '<b>Nothing here can be lost.</b> A wrong answer costs no points and can be retried as often as you like — ' +
         'only your best attempt is ever recorded. Every level and every mock test is open from the start, ' +
-        'so a task you cannot crack today will never block you: move on and come back to it.' +
+        'so a task you cannot crack today will never block you: move on and come back to it.<br>' +
+        'Every task opens on a clean sheet, so coming back to one means solving it again rather than reading ' +
+        'your old answer — which costs nothing, because the points you earned for it stay earned.' +
       '</div>'));
 
     var review = reviewQueue();
@@ -246,8 +249,9 @@
           '<div style="color:var(--muted);font-size:13px;margin-bottom:14px">' +
           esc(paper.subtitle || '') + (paper.subtitle ? '<br>' : '') +
           'Pass mark ' + Math.round(lv.passScore * 100) + '%. You can move between questions freely and your ' +
-          'answers are kept; marking happens at the end, like the real thing. Sit any paper as many times as ' +
-          'you want — a poor run never reduces the points you already have.</div>' +
+          'answers are kept; marking happens at the end, like the real thing. Leaving the paper ends the ' +
+          'sitting, and starting it again is a new attempt on clean sheets with a fresh hour. Sit any paper ' +
+          'as many times as you want — a poor run never reduces the points you already have.</div>' +
           '<button class="btn btn-primary" id="start-exam">Start ' + esc(paper.title.toLowerCase()) + '</button>' +
         '</div>'));
 
@@ -326,12 +330,12 @@
     state.level = lv; state.task = task;
     var targets = G.targetCells(task);
     var isPivot = task.mode === 'pivot';
-    var sheet;
-    if (examMode) {
-      sheet = state.exam.sheets[task.id] || (state.exam.sheets[task.id] = G.buildSheet(task));
-    } else {
-      sheet = state.sheets[task.id] || (state.sheets[task.id] = G.buildSheet(task));
-    }
+    // Inside a sitting the paper's own sheets are reused, so the answer given to
+    // question 4 is still there when you come back to it. Anywhere else the
+    // sheet is built again from scratch, wiping whatever was typed last time.
+    var sheet = examMode
+      ? (state.exam.sheets[task.id] || (state.exam.sheets[task.id] = G.buildSheet(task)))
+      : G.buildSheet(task);
 
     var idx = siblings.indexOf(task);
     var wrap = h('<div class="workspace"></div>');
@@ -453,7 +457,8 @@
     /* pivot builder */
     state.pivot = null;
     if (isPivot) {
-      var store = examMode ? state.exam.pivots : state.pivots;
+      // the same rule as for sheets: kept inside a sitting, empty everywhere else
+      var store = examMode ? state.exam.pivots : {};
       var builder = new root.XLPivotUI.PivotBuilder(pivotPane, sheet, task.expect.pivot.source || task.table,
         function (cfg) { store[task.id] = cfg; });
       state.pivot = builder;
@@ -712,6 +717,9 @@
     });
     updateHeader();
     state.exam = null;
+    // the sitting is over, so the address must stop naming one of its questions:
+    // reloading or going back now lands on the paper, not on a stale exam screen
+    setHashSilently('level/' + lv.id + '/' + paper.id);
 
     var page = h('<div class="page"></div>');
     var passed = share >= lv.passScore;
@@ -1063,10 +1071,60 @@
     window.scrollTo(0, 0);
   }
   function go(hash) { window.location.hash = '#/' + hash; }
+  // Points the address bar somewhere without redrawing: used by the result
+  // screen, which is shown in place but is not the question the address named.
+  function setHashSilently(hash) {
+    currentHash = hash;
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, '', '#/' + hash);
+    }
+  }
+
+  /* ---- leaving a mock test ends the sitting ------------------------------
+   * Answers are kept while you move between the twenty questions of a paper,
+   * and only then. Walk out of the paper and the sitting is over, so entering
+   * it again is a new attempt on a clean sheet with a fresh hour. Because that
+   * throws work away, it is only done without asking when nothing was answered. */
+  function insideExam(parts) {
+    var ex = state.exam;
+    if (!ex || parts.length !== 2 || String(parts[0]) !== String(ex.level.id)) return false;
+    return ex.paper.tasks.some(function (t) { return t.id === parts[1]; });
+  }
+  function examAnswered() {
+    var ex = state.exam;
+    if (!ex) return false;
+    return ex.paper.tasks.some(function (t) {
+      var sh = ex.sheets[t.id];
+      if (sh && G.targetCells(t).some(function (a1) { return sh.rawAt(a1) !== ''; })) return true;
+      var pv = ex.pivots[t.id];
+      return !!(pv && pv.values && pv.values.length);
+    });
+  }
+
+  var currentHash = '';
 
   function route() {
     var hash = (window.location.hash || '').replace(/^#\/?/, '');
     var parts = hash.split('/').filter(Boolean);
+
+    if (state.exam && !insideExam(parts)) {
+      var title = state.exam.paper.title;
+      if (examAnswered() && !confirm('Leave ' + title + '? Your answers are thrown away, ' +
+          'and opening it again starts a new attempt from a clean sheet.')) {
+        window.location.hash = '#/' + currentHash;     // stay where you were
+        return;
+      }
+      clearInterval(state.timerId);
+      state.exam = null;
+      currentHash = hash;
+      dispatch(parts);
+      return toast(title + ' was left unfinished. Opening it again starts a new attempt.');
+    }
+    currentHash = hash;
+    dispatch(parts);
+  }
+
+  function dispatch(parts) {
     Array.prototype.forEach.call(document.querySelectorAll('.mainnav button'), function (b) { b.classList.remove('active'); });
     if (!parts.length || parts[0] === 'home') {
       document.querySelector('.mainnav [data-nav="home"]').classList.add('active');
