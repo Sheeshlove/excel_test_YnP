@@ -205,15 +205,17 @@ that is modelled on Excel's, because the point is that the habits transfer.
 | Value Field Settings: name, summary, show values as, number format | the same dialog |
 | Grouping: Years / Quarters / Months / Days, or numeric bands | the same dialog; ticking two boxes nests them |
 | Report Layout: Compact or Tabular; Subtotals; Grand Totals | on the strip above the report |
-| Refresh, because a pivot works off a snapshot | the report is built from a snapshot and the button says so when it goes stale |
+| Refresh, because a pivot works off a snapshot | the report really is built from a snapshot, and the button turns amber when the source moves under it — though in these tasks the source data is read-only, so it is there to make the point rather than to be needed |
 | Eleven ways to summarise a value field | all eleven, with Excel's captions — and `Count` means `COUNTA`, `Count Numbers` means `COUNT` |
-| Show values as: % of grand / row / column / parent total, running total, rank, index | all of them; the running total and the rank take the row fields as their base rather than asking |
+| Show values as | 11 of Excel's 15: % of grand, row, column, parent-row and parent-column total, running total and % running total, both ranks, and index. The running total and the ranks take the row fields as their base rather than asking |
 | Calculated fields over field names | the same, evaluated on each group's totals exactly as Excel evaluates them |
 
 What is deliberately **not** there: slicers, timelines, pivot charts,
-`GETPIVOTDATA`, calculated *items*, and drilling through to the source rows.
-The Reference page says what each of those does, because a question can ask
-about them, but none of them is a thing you do to answer this test.
+`GETPIVOTDATA`, calculated *items*, drilling through to the source rows, and
+the four "show values as" modes that need you to pick a base item — `% Of`,
+`% of Parent Total`, `Difference From` and `% Difference From`. The Reference
+page says what the important ones do, because a question can ask about them,
+but none of them is a thing you do to answer this test.
 
 ### Marking compares the report, not the wording
 
