@@ -558,6 +558,103 @@ function check(cond, msg) { if (cond) pass++; else { fail++; console.log('  x ' 
   check((await page.locator('.pv-area[data-area="values"] .chip-name').first().innerText()).indexOf('Count of') === 0,
     'a text field dropped into Values defaults to Count, as Excel defaults it');
 
+  /* ---------- marking is on the value, never on the formula ---------- */
+  await page.goto(base + '#/4/4.1');
+  await page.waitForSelector('table.sheet');
+  // 4.1 is the SUMIF drill; type the five answers in as plain numbers instead
+  const typedAnswers = ['41800', '15000', '16600', '7950', '21250'];
+  for (let i = 0; i < typedAnswers.length; i++) {
+    await page.locator('td[data-r="' + (i + 1) + '"][data-c="9"]').click();
+    await page.keyboard.type(typedAnswers[i]);
+    await page.keyboard.press('Enter');
+  }
+  await page.locator('#btn-check').click();
+  await page.waitForSelector('.result.ok');
+  check(true, 'a typed-in number is marked correct: the test scores the value, not the formula');
+  check((await page.locator('.result.note').count()) === 1,
+    'and a note says what the task was drilling');
+  check(/typed in/.test(await page.locator('.result.note').innerText()),
+    'the note is about the method, not a penalty: ' +
+    (await page.locator('.result.note').innerText()).slice(0, 60));
+
+  // a formula that gets there another way is equally fine
+  await page.goto(base + '#/level/4');
+  await page.goto(base + '#/4/4.1');
+  await page.waitForSelector('table.sheet');
+  for (let i = 0; i < 5; i++) {
+    await page.locator('td[data-r="' + (i + 1) + '"][data-c="9"]').click();
+    await page.keyboard.type('=SUMPRODUCT(($B$2:$B$21=$I' + (i + 2) + ')*$F$2:$F$21)');
+    await page.keyboard.press('Enter');
+  }
+  await page.locator('#btn-check').click();
+  await page.waitForSelector('.result.ok');
+  check(true, 'SUMPRODUCT is accepted where the task was drilling SUMIF');
+
+  // the wrong number is still wrong
+  await page.goto(base + '#/level/4');
+  await page.goto(base + '#/4/4.1');
+  await page.waitForSelector('table.sheet');
+  await page.locator('td[data-r="1"][data-c="9"]').click();
+  await page.keyboard.type('123');
+  await page.keyboard.press('Enter');
+  await page.locator('#btn-check').click();
+  await page.waitForSelector('.result.bad');
+  check(/does not match/.test(await page.locator('.result').innerText()),
+    'a wrong value still fails, and the reason is the value');
+
+  /* ---------- a pivot table is available beside every question ---------- */
+  const sampleTasks = [['1', '1.1'], ['4', '4.1'], ['7', '7.1'], ['9', '9.1'], ['11', '11.1']];
+  let missingPivot = [];
+  for (const [lid, tid] of sampleTasks) {
+    await page.goto(base + '#/level/' + lid);
+    await page.goto(base + '#/' + lid + '/' + tid);
+    await page.waitForSelector('table.sheet');
+    const tabCount = await page.locator('.work-tabs button[data-tab="pivot"]').count();
+    if (!tabCount) missingPivot.push(lid + '/' + tid);
+  }
+  check(missingPivot.length === 0,
+    'every question offers a pivot table tab: ' + (missingPivot.join(', ') || 'all present'));
+
+  /* the scratch pivot works, and answers a question it was not built for */
+  await page.goto(base + '#/level/4');
+  await page.goto(base + '#/4/4.1');
+  await page.waitForSelector('table.sheet');
+  await page.locator('.work-tabs button[data-tab="pivot"]').click();
+  await page.waitForSelector('.pv-shell');
+  check((await page.locator('.pv-scratch').count()) === 1,
+    'it says plainly that a scratch pivot is not what gets marked');
+  await page.locator('.pf-row', { hasText: 'Region' }).first().locator('.pf-check').check();
+  await page.locator('.pf-row', { hasText: 'Revenue' }).first().locator('.pf-check').check();
+  await page.waitForSelector('table.pivot-table');
+  const scratch = await page.locator('table.pivot-table').innerText();
+  check(scratch.includes('Moscow') && scratch.includes('41,800'),
+    'a pivot built beside a formula question gives the same answer the formula would');
+  // read it off and type it in — which is exactly how the real test would be sat
+  await page.locator('.work-tabs button[data-tab="sheet"]').click();
+  await page.waitForSelector('table.sheet');
+  for (let i = 0; i < typedAnswers.length; i++) {
+    await page.locator('td[data-r="' + (i + 1) + '"][data-c="9"]').click();
+    await page.keyboard.type(typedAnswers[i]);
+    await page.keyboard.press('Enter');
+  }
+  await page.locator('#btn-check').click();
+  await page.waitForSelector('.result.ok');
+  check(true, 'and the answer read off that pivot is marked correct');
+
+  /* Change Data Source, for a sheet the guess got wrong */
+  await page.goto(base + '#/level/9');
+  await page.goto(base + '#/9/9.1');
+  await page.waitForSelector('table.sheet');
+  await page.locator('.work-tabs button[data-tab="pivot"]').click();
+  await page.waitForSelector('.pv-shell');
+  await page.locator('.pv-rbtn', { hasText: 'Data Source' }).click();
+  await page.waitForSelector('.pv-menu');
+  await page.locator('.pv-menu .pv-mitem', { hasText: 'Change Data Source' }).first().click();
+  await page.waitForSelector('.pv-modal');
+  check((await page.locator('.pv-source').count()) === 1,
+    'Change Data Source asks for a Table/Range, as Excel asks for it');
+  await page.locator('.pv-cancel').click();
+
   /* ---------- every task opens, plus a spread of generated questions ---------- */
   const allTasks = await page.evaluate(() => {
     const own = window.XLCurriculum.levels.flatMap(l => l.tasks.map(t => [l.id, t.id]));

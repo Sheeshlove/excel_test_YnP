@@ -5,7 +5,8 @@ table and decomposing revenue growth on a consulting case.
 
 Tasks are solved **in a real spreadsheet inside the app** — with its own formula
 engine, recalculation, sorting, filtering, pivot tables and Excel's keyboard
-shortcuts. What gets marked is the value you produced, not a multiple-choice tick.
+shortcuts. What gets marked is the value you produced, not a multiple-choice tick
+and not the formula you chose to get there.
 
 <img src="docs/screenshot-task.png" alt="A solved task with the explanation panel" width="100%">
 
@@ -188,6 +189,46 @@ Solving a task opens a walkthrough with four parts:
 
 ---
 
+## Only the answer is marked
+
+The real test looks at the number in the cell. It does not look at how the number
+got there, and neither does this app: a cell is wrong only when it is **empty**,
+when it **raises an Excel error** the reference answer does not raise, or when it
+**holds the wrong value**. Which function you used, whether you used one at all,
+and whether you worked the answer out in a pivot table and typed it in are all
+your own business.
+
+Every task still records the technique it was built to drill, and you still get
+told about it — as a line under the mark once the answer is in, never as a reason
+to fail:
+
+> **Correct.** 15 of 15 points · +15 XP
+>
+> The value is what counts, here and on the test. It is typed in rather than
+> worked out, though — in a model that is the first thing a reviewer pulls up.
+
+The one thing that is not a method is the state of the table itself. Where a task
+says "sort the table by revenue" or "filter to the won deals", the arranged table
+is the answer it asked for, so that is still checked — but which route you took to
+arrange it is not.
+
+## A pivot table beside every question
+
+A pivot is a tool, not a question type, so it sits behind a second tab on **every**
+task in the programme and in every mock test — not only on the ones that are about
+pivot tables.
+
+<img src="docs/screenshot-scratch.png" alt="A scratch pivot beside a SUMIF question" width="100%">
+
+The range it reads is the one Excel's own dialog would have guessed: the task's
+table if it declares one, otherwise the block of data found on the sheet. Where
+the guess is wrong or there is no obvious block, **Data Source ▸ Change Data
+Source** takes a range the same way Excel's dialog does.
+
+On a pivot task the report is the answer and opens first. Everywhere else it is a
+scratchpad, says so, and is never marked: read the number off it, type it into the
+sheet, and that scores exactly what a formula would.
+
 ## The pivot table builder
 
 Level 8 and every pivot question in the fifty papers are answered in a builder
@@ -323,8 +364,8 @@ npm test           # runs everything
 |---|---|
 | `tests/formula.test.js` | 122 checks on the engine, every expected value verified against Excel's behaviour |
 | `tests/pivot.test.js` | 82 checks on the pivot engine against what Excel actually does: every aggregation, date and numeric grouping, nesting and subtotals, sorting by label and by value, Top N, all eleven "show values as" modes, number formats, and the rule that marking compares the report rather than the captions |
-| `tests/curriculum.test.js` | 37,580 checks over the 90 tasks **and all 1,000 mock test questions**: every reference answer solves its task, raises no Excel error, and an untouched sheet fails; every address named in a task exists; every task has an explanation; every one of the 50 papers matches the published 20-question / 60-minute format and is reproducible from its number; every reference pivot lines up with its own header and is still marked correct in Tabular form |
-| `tests/ui.test.js` | 132 checks in a real Chromium: typing formulas, `⌘D`, `⌘T`, `⌘Z`, sorting, filtering with `SUBTOTAL`, and the pivot builder end to end — ticking fields, dragging them between areas, grouping dates from the Group dialog, sorting by value, a Top N filter, Value Field Settings, nesting with subtotals in both layouts, and the check that the report has no phantom column — plus the explanation panel, the timed mock test, the guarantee that a failed retry never lowers a score, that every level and all 50 papers are open on a fresh install, that progress written to the file store survives the browser's own storage being wiped, and 140 tasks opening cleanly |
+| `tests/curriculum.test.js` | 38,551 checks over the 90 tasks **and all 1,000 mock test questions**: every reference answer solves its task, raises no Excel error, and an untouched sheet fails; every address named in a task exists; every task has an explanation; every one of the 50 papers matches the published 20-question / 60-minute format and is reproducible from its number; every reference pivot lines up with its own header and is still marked correct in Tabular form; and — across all 90 tasks and all 1,000 mock questions — that typing the answer in as a plain constant passes, which is what proves no task is secretly marking the method |
+| `tests/ui.test.js` | 142 checks in a real Chromium: typing formulas, `⌘D`, `⌘T`, `⌘Z`, sorting, filtering with `SUBTOTAL`, and the pivot builder end to end — ticking fields, dragging them between areas, grouping dates from the Group dialog, sorting by value, a Top N filter, Value Field Settings, nesting with subtotals in both layouts, and the check that the report has no phantom column — plus a pivot tab beside a formula question, a typed-in number and a differently-written formula both being marked correct while a wrong value is not, the explanation panel, the timed mock test, the guarantee that a failed retry never lowers a score, that every level and all 50 papers are open on a fresh install, that progress written to the file store survives the browser's own storage being wiped, and 140 tasks opening cleanly |
 
 ### Layout
 

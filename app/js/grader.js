@@ -160,6 +160,44 @@
     return { ok: res.ok, reason: res.issues.join('; ') };
   }
 
+  /* ------------------------------------------------------- method notes --
+   * The real test marks the value and nothing else: how you arrived at it —
+   * a formula, a pivot table, or reading it off and typing it in — is your
+   * business. So nothing below can fail a cell. A task's `check` block still
+   * records the technique the task was built to drill, and that is worth
+   * knowing, so it comes back as a note beside the mark instead.
+   * ------------------------------------------------------------------- */
+  function methodNote(chk, raw) {
+    if (typeof raw !== 'string' || raw === '') return '';
+    if (raw.charAt(0) !== '=') {
+      return 'The value is what counts, here and on the test. It is typed in rather than ' +
+        'worked out, though — in a model that is the first thing a reviewer pulls up.';
+    }
+    if (!hasCellRef(raw)) {
+      return 'The numbers are written inside the formula, so the answer stops being true ' +
+        'the moment the data changes.';
+    }
+    var used = usedFunctions(raw);
+    var forbidden = (chk.forbid || []).map(XLF.normFn).filter(function (f) { return used.indexOf(f) >= 0; });
+    if (forbidden.length) {
+      return 'This task was drilling the version without ' + forbidden.join(', ') + '.';
+    }
+    var wanted = (chk.mustUse || []).map(XLF.normFn).filter(function (f) { return used.indexOf(f) < 0; });
+    var anyOf = (chk.mustUseAny || []).map(XLF.normFn);
+    if (anyOf.length && !anyOf.some(function (f) { return used.indexOf(f) >= 0; })) {
+      wanted.push(anyOf.join(' or '));
+    }
+    if (wanted.length) {
+      return 'The technique this task drills is ' + wanted.join(', ') + ' — worth solving it that way once too.';
+    }
+    var body = raw.replace(/\s+/g, '').toUpperCase();
+    var lack = (chk.mustContain || []).filter(function (frag) {
+      return body.indexOf(String(frag).replace(/\s+/g, '').toUpperCase()) < 0;
+    });
+    if (lack.length) return chk.containHint || ('the reference answer uses ' + lack.join(', '));
+    return '';
+  }
+
   function grade(task, userSheet, extra) {
     var ref = referenceSheet(task);
     var cells = targetCells(task);
@@ -174,31 +212,19 @@
       var want = ref.value(rc.row, rc.col);
       var ok = true, reason = '';
 
+      // Only three things can be wrong with an answer: there isn't one, it is
+      // an error, or it is the wrong number.
       if (raw === '' || raw === null) { ok = false; reason = 'the cell is empty'; }
-      else if (chk.requireFormula !== false && raw.charAt(0) !== '=') {
-        ok = false; reason = 'this needs a formula (start with =), not a typed-in number';
-      } else if (chk.noHardcode !== false && raw.charAt(0) === '=' && !hasCellRef(raw)) {
-        ok = false; reason = 'the formula must refer to cells instead of containing hard-coded numbers';
-      } else {
-        var used = usedFunctions(raw);
-        var must = (chk.mustUse || []).map(XLF.normFn);
-        var missing = must.filter(function (f) { return used.indexOf(f) < 0; });
-        var anyOf = (chk.mustUseAny || []).map(XLF.normFn);
-        var forbidden = (chk.forbid || []).map(XLF.normFn).filter(function (f) { return used.indexOf(f) >= 0; });
-        var body = raw.replace(/\s+/g, '').toUpperCase();
-        var lack = (chk.mustContain || []).filter(function (frag) { return body.indexOf(String(frag).replace(/\s+/g, '').toUpperCase()) < 0; });
-        var banned = (chk.mustNotContain || []).filter(function (frag) { return body.indexOf(String(frag).replace(/\s+/g, '').toUpperCase()) >= 0; });
-        if (missing.length) { ok = false; reason = 'this task wants you to use ' + missing.join(', '); }
-        else if (lack.length) { ok = false; reason = chk.containHint || ('the formula should contain: ' + lack.join(', ')); }
-        else if (banned.length) { ok = false; reason = chk.containHint || ('the formula must not contain: ' + banned.join(', ')); }
-        else if (anyOf.length && !anyOf.some(function (f) { return used.indexOf(f) >= 0; })) {
-          ok = false; reason = 'use one of these functions: ' + anyOf.join(' / ');
-        } else if (forbidden.length) { ok = false; reason = 'you may not use ' + forbidden.join(', ') + ' here'; }
-        else if (XLF.isError(got) && !XLF.isError(want)) { ok = false; reason = 'the formula returns the error ' + got.type; }
-        else if (!sameValue(got, want, chk.tol)) { ok = false; reason = 'the value does not match the expected answer'; }
+      else if (XLF.isError(got) && !XLF.isError(want)) {
+        ok = false; reason = 'this returns the error ' + got.type;
+      } else if (!sameValue(got, want, chk.tol)) {
+        ok = false; reason = 'the value does not match the expected answer';
       }
       if (!ok) allOk = false;
-      results.push({ cell: a1, ok: ok, reason: reason, got: got, want: want, raw: raw });
+      results.push({
+        cell: a1, ok: ok, reason: reason, got: got, want: want, raw: raw,
+        note: ok ? methodNote(chk, raw) : ''
+      });
     });
 
     // expectations about the sheet itself rather than about a formula
@@ -245,6 +271,7 @@
     grade: grade, buildSheet: buildSheet, referenceSheet: referenceSheet,
     applySolution: applySolution, applyFullSolution: applyFullSolution,
     expandRange: expandRange, targetCells: targetCells,
-    usedFunctions: usedFunctions, sameValue: sameValue, columnOf: columnOf
+    usedFunctions: usedFunctions, sameValue: sameValue, columnOf: columnOf,
+    methodNote: methodNote
   };
 });

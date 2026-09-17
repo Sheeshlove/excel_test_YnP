@@ -135,6 +135,31 @@
     return { fields: fields, rows: rows, kinds: kinds, r1: r1, c1: c1, r2: r2, c2: c2 };
   }
 
+  // Excel's PivotTable dialog guesses the range from the block the cursor is
+  // sitting in. With no cursor to go on, take the block that starts at the
+  // first filled cell — which on these sheets is the data table.
+  function detectRange(sheet, rows, cols) {
+    rows = rows || 40; cols = cols || 26;
+    var r0 = -1, c0 = -1, r, c;
+    for (r = 0; r < rows && r0 < 0; r++) {
+      for (c = 0; c < cols; c++) {
+        if (String(sheet.display(r, c)) !== '') { r0 = r; c0 = c; break; }
+      }
+    }
+    if (r0 < 0) return null;
+    var c1 = c0;
+    while (c1 + 1 < cols && String(sheet.display(r0, c1 + 1)) !== '') c1++;
+    var r1 = r0;
+    for (r = r0 + 1; r < rows; r++) {
+      var any = false;
+      for (c = c0; c <= c1; c++) { if (String(sheet.display(r, c)) !== '') { any = true; break; } }
+      if (!any) break;
+      r1 = r;
+    }
+    if (r1 <= r0) return null;              // a header row with nothing under it
+    return XLF.rcToA1(r0, c0) + ':' + XLF.rcToA1(r1, c1);
+  }
+
   /* =========================================================================
    * Group Field
    * ====================================================================== */
@@ -672,6 +697,7 @@
 
   return {
     build: build, compare: compare, readSource: readSource, format: format,
+    detectRange: detectRange,
     AGGS: AGGS, SHOW: SHOW, FORMATS: FORMATS,
     DATE_GROUPS: DATE_GROUPS, DATE_GROUP_LABEL: DATE_GROUP_LABEL,
     specLabel: specLabel, resolveField: resolveField, resolveValue: resolveValue,

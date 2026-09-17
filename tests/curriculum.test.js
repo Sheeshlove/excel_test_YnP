@@ -63,6 +63,26 @@ function checkTask(task, seen) {
     check(!G.grade(task, empty, { pivot: EMPTY_PIVOT }).passed,
       `${tag}: an untouched sheet passes — the marking tests nothing`);
 
+    // 3b. Which formula you wrote is never marked — only the value it produced.
+    //     So typing the reference answers straight in as constants has to pass.
+    //     (A task that also asks for the table to be sorted or filtered still
+    //     wants that: the arranged table is an answer, not a method, so the
+    //     check below arranges it and then types the numbers in.)
+    if (needsFormulas) {
+      const typed = G.buildSheet(task);
+      const exp = task.expect || {};
+      if (exp.sortedBy) typed.sortBy(G.columnOf(exp.sortedBy.col), exp.sortedBy.asc);
+      if (exp.filtered) typed.setFilter(G.columnOf(exp.filtered.col), exp.filtered.values);
+      G.targetCells(task).forEach(a1 => {
+        const v = ref.get(a1);
+        typed.setAt(a1, typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : String(v), { locked: false });
+      });
+      const asTyped = G.grade(task, typed, extra);
+      check(asTyped.passed, `${tag}: typing the answer in as a constant does not pass — ` +
+        `the marking still depends on how you got there: ` +
+        asTyped.cells.filter(c => !c.ok).map(c => `${c.cell}: ${c.reason}`).join('; '));
+    }
+
     // 4. target cells are editable
     const sh = G.buildSheet(task);
     G.targetCells(task).forEach(a1 => {

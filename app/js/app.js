@@ -121,7 +121,8 @@
         '<div class="hero-main">' +
           '<h1>Excel training for the Yakov &amp; Partners test</h1>' +
           '<p>Twelve levels from the address of a cell to a pivot table and a consulting case. ' +
-          'Every task is solved in a real spreadsheet and marked on the value it produces, exactly like the real test.</p>' +
+          'Every task is solved in a real spreadsheet and marked on the value it produces — the formula you chose, ' +
+          'or whether you used a pivot table instead, is your own business, exactly as it is on the real test.</p>' +
           '<div class="progressbar"><i style="width:' + pct + '%"></i></div>' +
           '<p style="margin-top:8px;font-size:12.5px">' + pct + '% of the programme · ' + totalGot + ' of ' + totalMax + ' points</p>' +
         '</div>' +
@@ -137,6 +138,9 @@
         '<b>Nothing here can be lost.</b> A wrong answer costs no points and can be retried as often as you like — ' +
         'only your best attempt is ever recorded. Every level and every mock test is open from the start, ' +
         'so a task you cannot crack today will never block you: move on and come back to it.<br>' +
+        '<b>Get there any way you like.</b> Only the answer is marked. Every question has a pivot table ' +
+        'beside it on the second tab, so working a number out there and typing it in scores exactly the same ' +
+        'as a formula — though the walkthrough will still show you the formula afterwards.<br>' +
         'Every task opens on a clean sheet, so coming back to one means solving it again rather than reading ' +
         'your old answer — which costs nothing, because the points you earned for it stay earned.' +
       '</div>'));
@@ -402,8 +406,9 @@
       var nav = h('<div class="exam-nav"></div>');
       siblings.forEach(function (t, i) {
         var sh = state.exam.sheets[t.id];
+        var pvt = state.exam.pivots[t.id];
         var touched = (sh && G.targetCells(t).some(function (a1) { return sh.rawAt(a1) !== ''; })) ||
-          (state.exam.pivots[t.id] && state.exam.pivots[t.id].values && state.exam.pivots[t.id].values.length);
+          (t.mode === 'pivot' && pvt && pvt.values && pvt.values.length);
         nav.appendChild(h('<button class="btn exam-chip' + (t.id === task.id ? ' current' : '') +
           (touched ? ' filled' : '') + '" data-go="' + lv.id + '/' + t.id + '">' + (i + 1) + '</button>'));
       });
@@ -418,15 +423,18 @@
     }
     wrap.appendChild(panel);
 
-    /* ---- work area: sheet, and a pivot tab when the task needs one ---- */
+    /* ---- work area: the sheet, and a pivot table beside every question ----
+     * A pivot is a tool, not a question type, so it is available on all of
+     * them: the real test cares about the number you produce, not about how
+     * you got to it. On a pivot task the report IS the answer and opens first;
+     * everywhere else it is a scratchpad behind the second tab. */
     var area = h('<section class="sheet-area"></section>');
-    var tabs = null;
-    if (isPivot) {
-      tabs = h('<div class="work-tabs">' +
-        '<button data-tab="pivot" class="active">Pivot table</button>' +
-        '<button data-tab="sheet">Source data</button></div>');
-      area.appendChild(tabs);
-    }
+    var tabs = h('<div class="work-tabs">' +
+      (isPivot
+        ? '<button data-tab="pivot" class="active">Pivot table</button><button data-tab="sheet">Source data</button>'
+        : '<button data-tab="sheet" class="active">Sheet</button><button data-tab="pivot">Pivot table</button>') +
+      '</div>');
+    area.appendChild(tabs);
     var sheetPane = h(
       '<div class="pane" id="pane-sheet">' +
         '<div class="formula-bar">' +
@@ -438,8 +446,10 @@
         '<div class="statusbar" id="statusbar"></div>' +
       '</div>');
     var pivotPane = h('<div class="pane" id="pane-pivot"></div>');
+    pivotPane.hidden = !isPivot;
     if (isPivot) { area.appendChild(pivotPane); sheetPane.hidden = true; }
     area.appendChild(sheetPane);
+    if (!isPivot) area.appendChild(pivotPane);
     if (task.table && !isPivot) {
       sheetPane.insertBefore(h('<div class="table-tools">' +
         '<button class="btn" id="btn-filter">Turn filter on <span class="kbd">⌘⇧F</span></button>' +
@@ -476,27 +486,31 @@
 
     /* pivot builder */
     state.pivot = null;
-    if (isPivot) {
-      // the same rule as for sheets: kept inside a sitting, empty everywhere else
-      var store = examMode ? state.exam.pivots : {};
-      var builder = new root.XLPivotUI.PivotBuilder(pivotPane, sheet, task.expect.pivot.source || task.table,
-        function (cfg) { store[task.id] = cfg; });
-      state.pivot = builder;
-      if (store[task.id] && (store[task.id].rows.length || store[task.id].values.length)) {
-        builder.setConfig(store[task.id]);
-      }
-      Array.prototype.forEach.call(tabs.children, function (b) {
-        b.addEventListener('click', function () {
-          Array.prototype.forEach.call(tabs.children, function (x) { x.classList.remove('active'); });
-          b.classList.add('active');
-          sheetPane.hidden = b.dataset.tab !== 'sheet';
-          pivotPane.hidden = b.dataset.tab !== 'pivot';
-          if (b.dataset.tab === 'sheet') grid.paint();
-        });
-      });
-    } else {
-      grid.focus();
+    // the range Excel's own dialog would have guessed, and the learner can change it
+    var pivotSource = (isPivot && task.expect.pivot.source) || task.table ||
+      PV.detectRange(sheet, (task.sheet && task.sheet.rows) || 20, (task.sheet && task.sheet.cols) || 10) || '';
+    // the same rule as for sheets: kept inside a sitting, empty everywhere else
+    var store = examMode ? state.exam.pivots : {};
+    var builder = new root.XLPivotUI.PivotBuilder(pivotPane, sheet, pivotSource,
+      function (cfg) { store[task.id] = cfg; }, { scratch: !isPivot });
+    state.pivot = builder;
+    var saved = store[task.id];
+    if (saved && (saved.rows.length || saved.values.length || saved.cols.length || saved.source)) {
+      builder.setConfig(saved);
     }
+    Array.prototype.forEach.call(tabs.children, function (b) {
+      b.addEventListener('click', function () {
+        Array.prototype.forEach.call(tabs.children, function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        sheetPane.hidden = b.dataset.tab !== 'sheet';
+        pivotPane.hidden = b.dataset.tab !== 'pivot';
+        if (b.dataset.tab === 'sheet') { grid.paint(); grid.focus(); }
+        // a scratch pivot that has not been built yet takes a fresh copy of the
+        // sheet, so it never opens showing data the learner has since changed
+        else if (!builder.config.values.length && builder.isStale()) builder.refresh();
+      });
+    });
+    if (!isPivot) grid.focus();
 
     var filterBtn = document.getElementById('btn-filter');
     if (filterBtn) {
@@ -671,6 +685,16 @@
       var next = around[around.indexOf(task) + 1];
       slot.appendChild(h('<div class="result ok"><b>Correct.</b> ' + rec.earned + ' of ' + task.points + ' points' +
         (rec.delta ? ' · <b>+' + rec.delta + ' XP</b>' : '') + '</div>'));
+      // Marking is on the value alone, as it is on the real test. Where the way
+      // the answer was reached is worth a word, it is said here — after the mark,
+      // never instead of it.
+      var notes = [];
+      res.cells.forEach(function (c) {
+        if (c.note && notes.indexOf(c.note) < 0) notes.push(c.note);
+      });
+      notes.slice(0, 2).forEach(function (n) {
+        slot.appendChild(h('<div class="result note">' + esc(n) + '</div>'));
+      });
       slot.appendChild(buildExplanation(task, sheet, { alwaysOpen: true }));
       var nav = h('<div class="panel-actions" style="margin-top:12px"></div>');
       if (next) nav.appendChild(h('<button class="btn btn-primary" data-go="' + lv.id + '/' + next.id + '">Next question →</button>'));
@@ -1131,8 +1155,9 @@
     return ex.paper.tasks.some(function (t) {
       var sh = ex.sheets[t.id];
       if (sh && G.targetCells(t).some(function (a1) { return sh.rawAt(a1) !== ''; })) return true;
+      // a scratch pivot beside a written question is working, not an answer
       var pv = ex.pivots[t.id];
-      return !!(pv && pv.values && pv.values.length);
+      return !!(t.mode === 'pivot' && pv && pv.values && pv.values.length);
     });
   }
 

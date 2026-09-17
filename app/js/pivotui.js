@@ -127,27 +127,60 @@
   /* ========================================================================
    * PivotBuilder
    * ===================================================================== */
-  function PivotBuilder(host, sheet, source, onChange) {
+  function PivotBuilder(host, sheet, source, onChange, opts) {
+    opts = opts || {};
     this.host = host;
     this.sheet = sheet;
-    this.source = source;
+    this.source = source || '';
+    this.defaultSource = this.source;
     this.onChange = onChange || function () {};
+    // A scratch pivot is the tool sitting beside a question that is answered in
+    // the sheet: nothing in it is marked, it is there to work an answer out.
+    this.scratch = !!opts.scratch;
     this.config = this.blank();
-    this.snap = snapshot(sheet, source);
-    var src = PV.readSource(this.snap, source);
-    this.fields = src.fields;
-    this.kinds = src.kinds;
+    this.readFields();
     this.paneOpen = true;
     this.drag = null;
     this.render();
   }
 
+  PivotBuilder.prototype.readFields = function () {
+    this.snap = snapshot(this.sheet, this.source);
+    var src = PV.readSource(this.snap, this.source);
+    this.fields = src.fields;
+    this.kinds = src.kinds;
+    this.rowsInSource = src.rows.length;
+  };
+
+  // Excel's Change Data Source. Fields that the new range does not have are
+  // dropped from the areas; everything else stays where it was put.
+  PivotBuilder.prototype.setSource = function (ref) {
+    var self = this;
+    this.source = String(ref || '').toUpperCase().replace(/\$/g, '');
+    this.readFields();
+    function known(name) { return self.fields.indexOf(name) >= 0; }
+    ['rows', 'cols'].forEach(function (a) {
+      self.config[a] = self.config[a].filter(function (e) { return known(typeof e === 'string' ? e : e.field); });
+    });
+    this.config.filters = this.config.filters.filter(function (f) { return known(f.field); });
+    this.config.values = this.config.values.filter(function (v) { return v.calc || known(v.field); });
+    this.render();
+  };
+
   PivotBuilder.prototype.blank = function () {
     return { rows: [], cols: [], values: [], filters: [], layout: 'compact', subtotals: true, grandRow: true, grandCol: true };
   };
-  PivotBuilder.prototype.getConfig = function () { return JSON.parse(JSON.stringify(this.config)); };
+  PivotBuilder.prototype.getConfig = function () {
+    var cfg = JSON.parse(JSON.stringify(this.config));
+    if (this.source && this.source !== this.defaultSource) cfg.source = this.source;
+    return cfg;
+  };
   PivotBuilder.prototype.setConfig = function (cfg) {
     var b = this.blank();
+    if (cfg.source && cfg.source !== this.source) {
+      this.source = cfg.source;
+      this.readFields();
+    }
     this.config = {
       rows: JSON.parse(JSON.stringify(cfg.rows || [])),
       cols: JSON.parse(JSON.stringify(cfg.cols || [])),
@@ -160,7 +193,11 @@
     };
     this.render();
   };
-  PivotBuilder.prototype.reset = function () { this.config = this.blank(); this.render(); };
+  PivotBuilder.prototype.reset = function () {
+    this.config = this.blank();
+    if (this.source !== this.defaultSource) { this.source = this.defaultSource; this.readFields(); }
+    this.render();
+  };
   PivotBuilder.prototype.refresh = function () {
     this.snap = snapshot(this.sheet, this.source);
     this.render();
@@ -327,6 +364,12 @@
           run: function () { c.grandRow = false; c.grandCol = true; self.render(); } },
         { label: 'Off for Rows and Columns', checked: c.grandRow === false && c.grandCol === false,
           run: function () { c.grandRow = false; c.grandCol = false; self.render(); } }
+      ]);
+    });
+    btn('Data Source ▾', 'The range the pivot reads', function (e) {
+      popup(e.currentTarget, [
+        { header: self.source || 'no range set' },
+        { label: 'Change Data Source…', run: function () { self.sourceDialog(); } }
       ]);
     });
     var spacer = el('div', 'pv-rspace');
@@ -876,6 +919,17 @@
     var self = this, c = this.config;
     var box = el('div', 'pv-result');
 
+    if (this.scratch) {
+      box.appendChild(el('div', 'pv-scratch',
+        'Scratch pivot. Nothing here is marked — it is here to work an answer out with. ' +
+        'Read the number off the report and type it into the sheet.'));
+    }
+    if (!this.source || !this.fields.length) {
+      box.appendChild(el('div', 'pivot-placeholder',
+        'No data range is set for this pivot. Use Data Source ▸ Change Data Source ' +
+        'and give it a range whose first row holds the field names.'));
+      return box;
+    }
     if (this.config.filters.length) box.appendChild(this.renderFilterStrip());
 
     if (!c.rows.length && !c.cols.length && !c.values.length) {
@@ -1079,6 +1133,28 @@
       strip.appendChild(row);
     });
     return strip;
+  };
+
+  /* Excel's Change PivotTable Data Source. */
+  PivotBuilder.prototype.sourceDialog = function () {
+    var self = this;
+    modal('Change PivotTable Data Source', function (body) {
+      body.appendChild(el('div', 'pv-flabel', 'Table/Range:'));
+      var input = document.createElement('input');
+      input.className = 'pv-input pv-source';
+      input.value = self.source;
+      input.placeholder = 'e.g. A1:G21';
+      body.appendChild(input);
+      body.appendChild(el('div', 'pv-hint',
+        'The first row of the range is read as the field names, exactly as Excel reads it. ' +
+        'A pivot needs a header row and at least one row of data under it.'));
+      setTimeout(function () { input.focus(); input.select(); }, 0);
+      return { input: input };
+    }, function (api) {
+      var ref = String(api.input.value || '').trim();
+      if (!/^\$?[A-Za-z]{1,3}\$?\d{1,4}:\$?[A-Za-z]{1,3}\$?\d{1,4}$/.test(ref)) return false;
+      self.setSource(ref);
+    });
   };
 
   /* Adding a calculated field — Excel's Insert Calculated Field dialog. */
