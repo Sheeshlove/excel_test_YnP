@@ -85,17 +85,26 @@ function checkTask(task, seen) {
     // 6. pivot tasks: the reference layout must actually produce numbers
     if (task.expect && task.expect.pivot) {
       const cfg = task.expect.pivot;
-      const built = PV.build(G.referenceSheet(task), Object.assign({ source: cfg.source || task.table }, cfg));
-      check(built.rowKeys.length > 0, `${tag}: the reference pivot produces no rows`);
+      const source = cfg.source || task.table;
+      const built = PV.build(G.referenceSheet(task), Object.assign({ source }, cfg));
+      check(built.rowLines.length > 0, `${tag}: the reference pivot produces no rows`);
       check(built.body.some(line => line.some(v => v !== null && v !== 0)),
         `${tag}: the reference pivot produces no numbers`);
       check(cfg.values.length > 0, `${tag}: the reference pivot has nothing in Values`);
+      // no Grand Total column unless something sits across the top, as in Excel
+      check(built.showGrandCol === ((cfg.cols || []).length > 0),
+        `${tag}: the grand total column does not follow Excel's rule`);
+      check(built.body.every(line => line.length === built.colLines.length * cfg.values.length),
+        `${tag}: the pivot body does not line up with its header`);
       // a pivot built the wrong way round must be rejected
-      if (cfg.rows.length && !cfg.cols.length) {
+      if ((cfg.rows || []).length && !(cfg.cols || []).length) {
         const swapped = Object.assign({}, cfg, { rows: [], cols: cfg.rows });
-        const bad = PV.build(G.referenceSheet(task), Object.assign({ source: cfg.source || task.table }, swapped));
+        const bad = PV.build(G.referenceSheet(task), Object.assign({ source }, swapped));
         check(!PV.compare(built, bad).ok, `${tag}: a transposed pivot is accepted as correct`);
       }
+      // Compact and Tabular are the same report, and must mark the same
+      const tabular = PV.build(G.referenceSheet(task), Object.assign({ source, layout: 'tabular' }, cfg));
+      check(PV.compare(built, tabular).ok, `${tag}: switching to Tabular form is marked wrong`);
     }
   }
 }

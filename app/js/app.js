@@ -316,6 +316,26 @@
   }
 
   /* ============================================================== TASK === */
+  // Puts a row/column area into words, including how a field was grouped,
+  // sorted or filtered — the parts of a pivot that are not a field name.
+  function describeFields(list) {
+    if (!list || !list.length) return '—';
+    return list.map(function (entry) {
+      var spec = PV.resolveField(entry);
+      var bits = [spec.caption];
+      if (spec.sort && spec.sort.by === 'value') {
+        bits.push('sorted by value, ' + (spec.sort.asc === false ? 'largest first' : 'smallest first'));
+      } else if (spec.sort && spec.sort.asc === false) {
+        bits.push('sorted Z to A');
+      }
+      if (spec.filter && spec.filter.top) {
+        bits.push((spec.filter.top.largest === false ? 'bottom ' : 'top ') + spec.filter.top.n);
+      }
+      if (spec.filter && spec.filter.values) bits.push('filtered to ' + spec.filter.values.join(', '));
+      return bits.length > 1 ? bits[0] + ' (' + bits.slice(1).join('; ') + ')' : bits[0];
+    }).join(', ');
+  }
+
   function renderTask(levelId, taskId) {
     var lv = levelById(levelId);
     if (!lv) return renderHome();
@@ -546,12 +566,14 @@
             esc(task.expect.filtered.values.join(', ')) + '</div>'));
         }
         if (pivotCfg) {
-          box.appendChild(h('<div>Rows: ' + esc(pivotCfg.rows.join(', ') || '—') + '</div>'));
-          box.appendChild(h('<div>Columns: ' + esc(pivotCfg.cols.join(', ') || '—') + '</div>'));
-          box.appendChild(h('<div>Values: ' + esc(pivotCfg.values.map(PV.specLabel).join(', ')) + '</div>'));
-          if (pivotCfg.filters.length) {
-            box.appendChild(h('<div>Filters: ' + esc(pivotCfg.filters.map(function (f) {
-              return f.field + ' = ' + f.values.join('/');
+          box.appendChild(h('<div>Rows: ' + esc(describeFields(pivotCfg.rows)) + '</div>'));
+          box.appendChild(h('<div>Columns: ' + esc(describeFields(pivotCfg.cols)) + '</div>'));
+          box.appendChild(h('<div>Values: ' + esc((pivotCfg.values || []).map(function (v) {
+            return PV.specLabel(PV.resolveValue(v));
+          }).join(', ')) + '</div>'));
+          if ((pivotCfg.filters || []).length) {
+            box.appendChild(h('<div>Report filter: ' + esc(pivotCfg.filters.map(function (f) {
+              return f.field + ' = ' + (f.values || []).join(', ');
             }).join('; ')) + '</div>'));
           }
         }
@@ -887,10 +909,12 @@
     tab = tab || 'shortcuts';
     var page = h('<div class="page"></div>');
     page.appendChild(h('<div class="page-head"><h1>Reference</h1>' +
-      '<p>Everything the test asks about: Excel shortcuts for macOS, the functions with their typical use, and what each error means.</p></div>'));
+      '<p>Everything the test asks about: Excel shortcuts for macOS, the functions with their typical use, ' +
+      'every part of a pivot table and what it is for, and what each error means.</p></div>'));
     var tabs = h('<div class="ref-tabs">' +
       '<button data-tab="shortcuts">Shortcuts</button>' +
       '<button data-tab="functions">Functions</button>' +
+      '<button data-tab="pivot">Pivot tables</button>' +
       '<button data-tab="errors">Excel errors</button>' +
       '<button data-tab="platform">Mac / Windows</button></div>');
     page.appendChild(tabs);
@@ -930,6 +954,17 @@
           tb2.appendChild(h('<tr><td class="k">' + esc(f[0]) + '</td><td class="why">' + esc(f[1]) + '</td><td>' + esc(f[2]) + '</td></tr>'));
         });
         t.appendChild(tb2);
+      } else if (tab === 'pivot') {
+        t.appendChild(h('<thead><tr><th style="width:210px">Part of the pivot</th>' +
+          '<th style="width:130px">Where it lives</th><th>What it is for</th></tr></thead>'));
+        var tb4 = h('<tbody></tbody>');
+        (DRILLS.PIVOT_REF || []).forEach(function (r) {
+          var hay = (r[0] + ' ' + r[1] + ' ' + r[2]).toLowerCase();
+          if (filter && hay.indexOf(filter) < 0) return;
+          tb4.appendChild(h('<tr><td class="k">' + esc(r[0]) + '</td><td class="why">' + esc(r[1]) +
+            '</td><td>' + esc(r[2]) + '</td></tr>'));
+        });
+        t.appendChild(tb4);
       } else {
         t.appendChild(h('<thead><tr><th style="width:150px">Error</th><th>What it means</th><th style="width:38%">What to do</th></tr></thead>'));
         var tb3 = h('<tbody></tbody>');

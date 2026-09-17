@@ -1703,6 +1703,263 @@
     };
   });
 
+
+  var MONTH_NAME = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  question('pivot-quarters', 'pivot', 30, function (d) {
+    var q = [1, 2, 3, 4].map(function (n) {
+      return { n: n, v: d.sumWhere(function (r) { return r.quarter === n; }) };
+    });
+    var best = q.slice().sort(function (a, b) { return b.v - a.v; })[0];
+    return {
+      title: 'Pivot: group the dates into quarters',
+      mode: 'pivot',
+      brief: 'Build revenue by quarter. Put Date into ROWS, use Group Field to group it by quarters, ' +
+        'and put Sum of Revenue into VALUES.',
+      hint: 'Dropped in raw, Date gives one line per transaction. Open the field menu, choose Group, and tick Quarters.',
+      sheet: sheetFor(d, {}),
+      table: TABLE,
+      target: [],
+      solution: {},
+      expect: { pivot: { source: TABLE, rows: [{ field: 'Date', group: 'quarters' }], cols: [],
+        values: [{ field: 'Revenue', agg: 'sum' }], filters: [] } },
+      explain: {
+        idea: 'A date column is useless down the side of a report until it is grouped. Group Field is the ' +
+          'command that does it, and "grouping" in the published test brief is exactly this.',
+        walk: [
+          'Ungrouped you get fifteen lines, one per transaction — a list, not a report. That is the signal to group.',
+          'Grouped by quarters it collapses to four: ' + q.map(function (x) { return 'Q' + x.n + ' ' + money(x.v); }).join(', ') + '.',
+          'The strongest quarter is the ' + ['first', 'second', 'third', 'fourth'][best.n - 1] +
+            ', on ' + money(best.v) + ' of the ' + money(d.totalRevenue) + ' booked in the year.',
+          'The quarters come out in calendar order because the pivot sorts on the underlying date, not on the text of the label.'
+        ],
+        mistakes: [
+          'Building a helper column of quarter numbers with a formula. It works, and on a timed test it costs you two minutes you did not have.',
+          'Leaving the dates ungrouped and reading the first four lines as if they were quarters.'
+        ],
+        onTheJob: 'Every transaction extract arrives with a date and no period column. Grouping it is the first thing you do.'
+      }
+    };
+  });
+
+  question('pivot-months', 'pivot', 30, function (d) {
+    var months = {};
+    d.rows.forEach(function (r) { months[r.month] = (months[r.month] || 0) + r.revenue; });
+    var keys = Object.keys(months).map(Number).sort(function (a, b) { return a - b; });
+    var peak = keys.slice().sort(function (a, b) { return months[b] - months[a]; })[0];
+    return {
+      title: 'Pivot: the monthly shape of the year',
+      mode: 'pivot',
+      brief: 'Build revenue by month: Date in ROWS grouped by months, Sum of Revenue in VALUES.',
+      hint: 'Group the Date field by Months. The months must come out in calendar order, not alphabetical order.',
+      sheet: sheetFor(d, {}),
+      table: TABLE,
+      target: [],
+      solution: {},
+      expect: { pivot: { source: TABLE, rows: [{ field: 'Date', group: 'months' }], cols: [],
+        values: [{ field: 'Revenue', agg: 'sum' }], filters: [] } },
+      explain: {
+        idea: 'Months are the standard grain for a trend. The pivot groups them from the date column itself, ' +
+          'so nothing has to be added to the source data.',
+        walk: [
+          'The busiest month is ' + MONTH_NAME[peak - 1] + ' on ' + money(months[peak]) + '.',
+          'Only the months that actually contain a transaction appear. A month with no sales is simply absent, ' +
+            'which is worth saying out loud on a chart rather than leaving the reader to assume it was zero.',
+          'The order is Jan, Feb, Mar — calendar order. A month column built as text would have sorted Apr, Aug, Dec, ' +
+            'which is the classic way a monthly chart ends up nonsense.',
+          'The whole year still adds to ' + money(d.totalRevenue) + ': grouping never changes a total.'
+        ],
+        mistakes: [
+          'Grouping by months on an extract covering several years, which adds each January to every other January.',
+          'Sorting the month labels A to Z and producing a chart that starts in April.'
+        ],
+        onTheJob: 'Monthly revenue is the first chart in nearly every commercial pack, and it comes out of exactly this pivot.'
+      }
+    };
+  });
+
+  question('pivot-sorted', 'pivot', 30, function (d) {
+    var ranked = d.regions.map(function (rg) {
+      return { name: rg, v: d.sumWhere(function (r) { return r.region === rg; }) };
+    }).sort(function (a, b) { return b.v - a.v; });
+    return {
+      title: 'Pivot: ranked, not alphabetical',
+      mode: 'pivot',
+      brief: 'Build revenue by region — Region in ROWS, Sum of Revenue in VALUES — and sort it so the largest ' +
+        'region is the first line.',
+      hint: 'Use the arrow on Row Labels, then More Sort Options, and sort Largest to Smallest by Sum of Revenue. ' +
+        'Sort Z to A is a different thing: it sorts the names backwards.',
+      sheet: sheetFor(d, {}),
+      table: TABLE,
+      target: [],
+      solution: {},
+      expect: { pivot: { source: TABLE,
+        rows: [{ field: 'Region', sort: { by: 'value', value: 0, asc: false } }], cols: [],
+        values: [{ field: 'Revenue', agg: 'sum' }], filters: [] } },
+      explain: {
+        idea: 'A pivot sorts its labels alphabetically until told otherwise, and alphabetical order says nothing ' +
+          'about the business. Sorting by the value field is what turns a table into a ranking.',
+        walk: [
+          'The ranking is ' + ranked.map(function (x) { return x.name + ' ' + money(x.v); }).join(', ') + '.',
+          ranked[0].name + ' leads on ' + money(ranked[0].v) + ', which is ' +
+            pct(ranked[0].v / d.totalRevenue) + ' of the book.',
+          'The sort belongs to the field, not to the numbers on screen, so it survives a change of filter or a refresh.',
+          'Sorting the source data instead would have achieved nothing: the pivot re-groups the rows whatever order they are in.'
+        ],
+        mistakes: [
+          'Choosing Sort Z to A and getting the alphabet backwards rather than the biggest first.',
+          'Sorting by the wrong value field when the report has more than one.'
+        ],
+        onTheJob: 'Every ranking slide is a pivot sorted by its value field. Doing it in the pivot rather than by hand is what keeps it right after the numbers change.'
+      }
+    };
+  });
+
+  question('pivot-nested', 'pivot', 30, function (d) {
+    var top = d.regions.map(function (rg) {
+      return { name: rg, v: d.sumWhere(function (r) { return r.region === rg; }) };
+    }).sort(function (a, b) { return b.v - a.v; })[0];
+    return {
+      title: 'Pivot: one field nested inside another',
+      mode: 'pivot',
+      brief: 'Put Region into ROWS and then Product into ROWS underneath it, with Sum of Revenue in VALUES. ' +
+        'The result is a nested list with a subtotal per region, not a grid.',
+      hint: 'Both fields go into the Rows area, Region first. The order of the chips decides which is nested inside which.',
+      sheet: sheetFor(d, {}),
+      table: TABLE,
+      target: [],
+      solution: {},
+      expect: { pivot: { source: TABLE, rows: ['Region', 'Product'], cols: [],
+        values: [{ field: 'Revenue', agg: 'sum' }], filters: [] } },
+      explain: {
+        idea: 'Two fields in Rows nest; one field in Rows and one in Columns cross. Same two fields, two different reports, ' +
+          'and only one of them is what the question asked for.',
+        walk: [
+          'Region is the outer field, so each region gets a group with one line per product inside it, and a subtotal.',
+          top.name + ' subtotals to ' + money(top.v) + ', and the region subtotals add to ' + money(d.totalRevenue) + '.',
+          'In Compact form the subtotal sits on the region line with the products indented underneath; in Tabular form it ' +
+            'moves to the foot of each group. The numbers are identical, and either is accepted.',
+          'Swap the two chips and the report inverts: products at the top level with regions inside them.'
+        ],
+        mistakes: [
+          'Putting Product in Columns instead, which gives a grid — a perfectly good report, and not this one.',
+          'Reading a subtotal line as if it were another product.'
+        ],
+        onTheJob: 'Nesting is how you walk down a hierarchy — region, then product, then customer — without building three tables.'
+      }
+    };
+  });
+
+  question('pivot-pctrow', 'pivot', 30, function (d) {
+    var rg = d.commonest('region');
+    var total = d.sumWhere(function (r) { return r.region === rg; });
+    var mix = d.products.map(function (p) {
+      return p + ' ' + pct(d.sumWhere(function (r) { return r.region === rg && r.product === p; }) / total);
+    });
+    return {
+      title: 'Pivot: the product mix of each region',
+      mode: 'pivot',
+      brief: 'Region in ROWS, Product in COLUMNS, Revenue in VALUES — and show each number as a percentage of its ' +
+        'ROW total, so that every region’s mix adds to 100%.',
+      hint: 'Value Field Settings, then "Show values as" → % of row total. With a field in Columns this is a ' +
+        'different answer from % of grand total.',
+      sheet: sheetFor(d, {}),
+      table: TABLE,
+      target: [],
+      solution: {},
+      expect: { pivot: { source: TABLE, rows: ['Region'], cols: ['Product'],
+        values: [{ field: 'Revenue', agg: 'sum', show: 'pctRow' }], filters: [] } },
+      explain: {
+        idea: '% of grand total, % of row total and % of column total are three different questions asked of the same ' +
+          'grid. Row total gives you a mix per row.',
+        walk: [
+          'Every row now adds to 100%, and the Grand Total column is 100% all the way down by construction.',
+          rg + ' splits ' + mix.join(', ') + '.',
+          'Switch to % of column total and the question becomes "where does each product sell", with the columns adding to 100% instead.',
+          'The absolute amounts are one dropdown away — No calculation brings them straight back.'
+        ],
+        mistakes: [
+          'Choosing % of column total when the sentence you want to write is about a region.',
+          'Showing a mix with no size beside it, so the reader cannot tell whether the biggest slice is large or trivial.'
+        ],
+        onTheJob: 'A mix table is how you show that two regions of the same size are completely different businesses.'
+      }
+    };
+  });
+
+  question('pivot-top', 'pivot', 30, function (d) {
+    var ranked = d.managers.map(function (m) {
+      return { name: m, v: d.sumWhere(function (r) { return r.manager === m; }) };
+    }).sort(function (a, b) { return b.v - a.v; });
+    var kept = ranked.slice(0, 2);
+    var keptTotal = kept.reduce(function (a, x) { return a + x.v; }, 0);
+    return {
+      title: 'Pivot: keep only the top two',
+      mode: 'pivot',
+      brief: 'Build revenue by manager, then apply a Top 2 value filter so that only the two largest managers ' +
+        'remain in the report.',
+      hint: 'The arrow on Row Labels offers Top 10 — the dialog lets you change the number to 2 and choose which ' +
+        'value field to rank by.',
+      sheet: sheetFor(d, {}),
+      table: TABLE,
+      target: [],
+      solution: {},
+      expect: { pivot: { source: TABLE,
+        rows: [{ field: 'Manager', filter: { top: { n: 2, value: 0, largest: true } } }], cols: [],
+        values: [{ field: 'Revenue', agg: 'sum' }], filters: [] } },
+      explain: {
+        idea: 'A value filter keeps the N largest items of a field and drops the rest from the report entirely — ' +
+          'which means every total moves with it.',
+        walk: [
+          'The two that survive are ' + kept.map(function (x) { return x.name + ' ' + money(x.v); }).join(' and ') + '.',
+          'The grand total falls from ' + money(d.totalRevenue) + ' to ' + money(keptTotal) +
+            ', because the filtered-out rows have left the report. That is ' + pct(keptTotal / d.totalRevenue) +
+            ' of revenue in two of the ' + d.managers.length + ' managers.',
+          'Top N ranks the GROUPS of the field it is applied to, not the individual transactions.',
+          'Filtering is not sorting: the survivors still come out in alphabetical order unless you sort as well.'
+        ],
+        mistakes: [
+          'Quoting the filtered grand total as the total of the business.',
+          'Expecting Top 2 to give you the two biggest transactions rather than the two biggest managers.'
+        ],
+        onTheJob: '"Top ten customers" is followed by "and what share is that?" every single time. The filter gives the first number, the unfiltered total the second.'
+      }
+    };
+  });
+
+  question('pivot-maxmin', 'pivot', 25, function (d) {
+    var big = d.byRevenue[0], small = d.byRevenue[d.byRevenue.length - 1];
+    return {
+      title: 'Pivot: the largest and smallest transaction',
+      mode: 'pivot',
+      brief: 'Region in ROWS, and Revenue in VALUES twice: summarised once as Max and once as Min, so the report ' +
+        'shows the biggest and the smallest single transaction in each region.',
+      hint: 'Add Revenue to Values twice, then use Value Field Settings on each chip — Max on one, Min on the other.',
+      sheet: sheetFor(d, {}),
+      table: TABLE,
+      target: [],
+      solution: {},
+      expect: { pivot: { source: TABLE, rows: ['Region'], cols: [],
+        values: [{ field: 'Revenue', agg: 'max' }, { field: 'Revenue', agg: 'min' }], filters: [] } },
+      explain: {
+        idea: 'Sum and Average describe the middle of a group; Max and Min describe its edges. On a short book the ' +
+          'edges are usually where the story is.',
+        walk: [
+          'The largest transaction in the book is ' + money(big.revenue) + ' in ' + big.region +
+            '; the smallest is ' + money(small.revenue) + ' in ' + small.region + '.',
+          'The Grand Total line carries those two numbers, because it is computed from the raw transactions rather than from the lines above it.',
+          'The same field sits in the Values area twice with a different summary each time. That is what the Values area is for.',
+          'A wide gap between Max and Min in one region is the sign that its average tells you nothing about a typical order.'
+        ],
+        mistakes: [
+          'Reading Max as the region total.',
+          'Adding Revenue twice and forgetting to change the second summary, so the report shows the same column twice.'
+        ],
+        onTheJob: 'Deal size distribution is the first cut of any pricing question, and it is four dropdowns in one pivot.'
+      }
+    };
+  });
+
   /* =========================================================================
    * Assembling a paper
    * ====================================================================== */

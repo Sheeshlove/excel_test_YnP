@@ -48,6 +48,13 @@
 
     { mac: '⌘ + ⇧ + F', win: 'Ctrl + Shift + L', action: 'Turn the autofilter on or off', cat: 'Data', why: 'The first thing you do to any new table.' },
     { mac: '⌥ + ↓', win: 'Alt + ↓', action: 'Open the filter dropdown', cat: 'Data', why: 'Filtering without the mouse.' },
+
+    { mac: 'Insert ▸ PivotTable', win: 'Alt, N, V', action: 'Create a pivot table from the selected range', cat: 'Pivot', why: 'Select one cell inside the data first and Excel finds the whole table for you. On a Mac there is no default key for it — the ribbon is the fast path.' },
+    { mac: 'Data ▸ Refresh', win: 'Alt + F5', action: 'Refresh the pivot table', cat: 'Pivot', why: 'A pivot works off a snapshot. Change the source and nothing moves until you refresh — the commonest reason a pivot disagrees with the data beside it.' },
+    { mac: '⌘ + ⇧ + K', win: 'Alt + ⇧ + →', action: 'Group the selected field (dates into quarters, numbers into bands)', cat: 'Pivot', why: 'This is what the test brief means by grouping. Select a date row label first.' },
+    { mac: '⌘ + ⇧ + J', win: 'Alt + ⇧ + ←', action: 'Ungroup the selected field', cat: 'Pivot', why: 'Puts the raw dates back. Grouping never touched the source data.' },
+    { mac: '⌃ + ⌥ + Click', win: 'Shift + F10', action: 'Open the field menu: sort, filter, group, field settings', cat: 'Pivot', why: 'Everything you can do to a pivot field lives on one menu. Learn this and you never touch the ribbon.' },
+    { mac: 'Double-click a number', win: 'Double-click a number', action: 'Show Details: the source rows behind one pivot cell', cat: 'Pivot', why: 'Excel writes the underlying records onto a new sheet. The fastest way to answer "which deals are those?" and to check a number you do not believe.' },
     { mac: '⌘ + ⇧ + O', win: 'Ctrl + G → Special', action: 'Select the cells that carry comments', cat: 'Data', why: 'Quick audit of the notes left in a model.' },
     { mac: '⌃ + ⇧ + [', win: 'Ctrl + [', action: 'Trace the precedents of a formula', cat: 'Audit', why: 'Unpicking someone else\'s model: where did this number come from?' },
     { mac: '⌘ + P', win: 'Ctrl + P', action: 'Print and print preview', cat: 'Other', why: 'Check the table fits on the page.' },
@@ -82,7 +89,44 @@
     { q: 'A pivot shows Count where you expected Sum. Why?', options: ['The column contains text', 'The pivot is broken', 'The filter is on', 'The data is unsorted'], answer: 0, why: 'Excel defaults to Count when the field is not purely numeric — treat it as a data quality warning.' },
     { q: 'Show each region as a share of total revenue in a pivot', options: ['Show values as % of grand total', 'A column of divisions beside it', 'Percentage number format', 'A calculated field'], answer: 0, why: 'One dropdown, and the shares are guaranteed to add to 100%.' },
     { q: 'Gross profit is not a column in the data. In a pivot you', options: ['add a calculated field', 'sort by margin', 'add a report filter', 'change the aggregation'], answer: 0, why: 'A calculated field is a formula over field names, evaluated for every group.' },
+    { q: 'A calculated field of Revenue × Margin gives a profit bigger than revenue. Why?', options: ['It multiplies the group TOTALS, not each row', 'The margins are wrong', 'The filter is on', 'It needs refreshing'], answer: 0, why: 'A calculated field is applied after aggregation. It added the margins up — which means nothing — and multiplied. Products and ratios of two source columns usually need a helper column instead.' },
+    { q: 'A date column dropped into Rows gives one line per transaction. Fix it with', options: ['Group Field — quarters or months', 'a sort', 'a report filter', 'Show values as'], answer: 0, why: 'Group Field turns a date into years, quarters, months or days. This is what the test brief means by "grouping".' },
+    { q: 'You ticked Years AND Quarters in the Group dialog. Excel gives you', options: ['two nested fields, years outside', 'one field of eight labels', 'an error', 'quarters only'], answer: 0, why: 'Ticking several boxes creates several fields, nested outermost-first. That is the standard quarterly trend table.' },
+    { q: 'A pivot lists regions alphabetically. To rank them by revenue you', options: ['sort the field by the value field', 'sort the source data', 'sort Z to A', 'use a report filter'], answer: 0, why: 'Sort Z to A only reverses the alphabet. Sorting by the value field is a property of the pivot field and survives a refresh.' },
+    { q: 'Top 10 filter on a pivot field ranks', options: ['the groups of that field', 'the individual source rows', 'the columns', 'the grand totals'], answer: 0, why: 'And everything outside the top N leaves the report — so the grand total falls with it. Never quote the filtered total as the total.' },
+    { q: 'Two fields in ROWS versus one in ROWS and one in COLUMNS', options: ['nesting with subtotals versus a grid', 'the same report', 'the second is always wrong', 'only the order of the columns differs'], answer: 0, why: 'Nesting answers "what is inside each region"; crossing answers "region against product". Know which one the question asked for.' },
+    { q: 'In a pivot, "Count" of a field means', options: ['COUNTA — every non-empty cell of that field', 'COUNT — only the numbers', 'the number of source rows, always', 'the number of distinct values'], answer: 0, why: 'Count Numbers is the separate option that behaves like COUNT. A blank in the counted column lowers Count but not the row count.' },
+    { q: 'Each row of a region × product grid should add to 100%. You want', options: ['% of row total', '% of grand total', '% of column total', 'a calculated field'], answer: 0, why: 'Whichever total your sentence is about is the one that must add to 100%.' },
     { q: 'Sorting a single column while leaving the rest alone', options: ['destroys the data', 'is the correct way to sort', 'is faster', 'keeps the records intact'], answer: 0, why: 'Rows must move together. Always sort the table, never one selected column.' }
+  ];
+
+  /* Pivot tables: what each part is for. Feeds the Reference page. */
+  var PIVOT_REF = [
+    ['ROWS', 'The four areas', 'What you group down the side. One field gives a list; two fields nest, the outer one first, with a subtotal per group.'],
+    ['COLUMNS', 'The four areas', 'What you group across the top. Rows × Columns gives a matrix; the same two fields both in Rows gives a nested list instead.'],
+    ['VALUES', 'The four areas', 'The number being summarised. It holds a list — the same field can go in twice with a different summary each time.'],
+    ['FILTERS', 'The four areas', 'Scopes the whole report before anything is aggregated. The pivot equivalent of the autofilter, and it must be stated on the slide.'],
+    ['Sum / Average / Count', 'Summarise by', 'Count means COUNTA: every non-empty cell of that field. Count Numbers is the one that behaves like COUNT. Excel offers eleven in all, including Max, Min, Product, StdDev and Var.'],
+    ['A text field in Values', 'Summarise by', 'Excel defaults it to Count, because Sum of text is 0. Treat a surprise Count as a data-quality warning: the column is not purely numeric.'],
+    ['% of grand total', 'Show values as', 'Every cell divided by the corner cell. The whole report adds to 100% once.'],
+    ['% of row total', 'Show values as', 'Each row adds to 100% — the mix within each row. Meaningless unless a field sits in Columns.'],
+    ['% of column total', 'Show values as', 'Each column adds to 100% — where each column-item comes from.'],
+    ['% of parent row total', 'Show values as', 'Divides by the group the line sits inside rather than by the whole report. For nested rows this is usually the one you want.'],
+    ['Running total in', 'Show values as', 'Accumulates down the rows. With a sort by value it produces a concentration curve without a single formula.'],
+    ['Rank largest to smallest', 'Show values as', 'Numbers the items instead of showing amounts. Useful beside the amounts, useless instead of them.'],
+    ['Group Field: dates', 'Grouping', 'Turns a date column into Years, Quarters, Months or Days. Tick several and they nest, outermost first. This is what the test brief means by "grouping".'],
+    ['Group Field: numbers', 'Grouping', 'Bands a numeric column — Starting at, Ending at, By — to turn deal sizes into a distribution.'],
+    ['Group is greyed out', 'Grouping', 'The column is text, not dates or numbers. Clean it first: that is a TRIM / VALUE / DATEVALUE job, not a pivot job.'],
+    ['Sort by value', 'Sorting', 'Ranks the items by one of the value fields. Sort Z to A only reverses the alphabet — a different thing entirely.'],
+    ['Top 10 filter', 'Filtering', 'Keeps the N largest or smallest items of a field. Everything else leaves the report, so the grand total falls too.'],
+    ['Label filter / tick list', 'Filtering', 'Keeps the items you tick. Unlike a report filter it belongs to the field, so it also changes which rows or columns exist.'],
+    ['Calculated field', 'Calculations', 'A formula over field NAMES, applied to each group’s TOTALS. Sums and differences are safe; products and ratios of two source columns usually need a helper column instead.'],
+    ['Compact / Tabular form', 'Layout', 'Compact indents the nested fields into one column with the subtotal on the parent line; Tabular gives each field its own column and puts the subtotal at the foot of the group. Same numbers.'],
+    ['Grand totals', 'Layout', 'On for rows and columns by default — but there is no Grand Total column when nothing sits in Columns, because there would be nothing to total across.'],
+    ['Refresh', 'Housekeeping', 'A pivot works off a snapshot of the source. Change the data and the pivot does not move until you refresh it.'],
+    ['Show Details', 'Housekeeping', 'Double-click any number and Excel writes the source rows behind it onto a new sheet. The fastest way to check a number you do not believe.'],
+    ['GETPIVOTDATA', 'Housekeeping', 'What Excel writes when you click a pivot cell from another formula. It is robust to the pivot changing shape, and it is why you cannot simply drag that formula across. Turn it off in the PivotTable options if you want plain references.'],
+    ['Pivot or SUMIFS?', 'Judgement', 'A pivot is a view; SUMIFS is a model. If the number must live in a specific cell and feed something else, write SUMIFS. If you need six cuts in two minutes, pivot.']
   ];
 
   /* Excel errors and what they mean */
@@ -159,7 +203,7 @@
   }
 
   return {
-    SHORTCUTS: SHORTCUTS, FUNCTION_QUIZ: FUNCTION_QUIZ, ERROR_QUIZ: ERROR_QUIZ,
+    SHORTCUTS: SHORTCUTS, PIVOT_REF: PIVOT_REF, FUNCTION_QUIZ: FUNCTION_QUIZ, ERROR_QUIZ: ERROR_QUIZ,
     buildDrill: buildDrill, shuffle: shuffle
   };
 });

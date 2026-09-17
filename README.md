@@ -22,7 +22,7 @@ The firm describes the test as follows, and the app mirrors it:
 | Working with tables, formulas and **pivot tables** | Levels 7 and 8 are entirely sorting/filtering and pivot tables |
 | Basic and advanced formulas: SUM, AVERAGE, COUNT; IF, IFS, SUMIF; VLOOKUP, INDEX/MATCH | Levels 1–6 |
 | Sorting by criteria and filtering | Level 7, with a working autofilter and SUBTOTAL |
-| Pivot tables: grouping, filters, calculated fields | Level 8, with a real pivot builder |
+| Pivot tables: **grouping**, filters, calculated fields | Level 8 — thirteen tasks on a builder that has Excel's four areas, Group Field, sorting, Top N and calculated fields |
 | Every question mirrors a real consulting case | Every data set is a deal book, a P&L or a business case |
 | VBA and Power Query are **not** required | Not taught, not needed |
 
@@ -89,7 +89,7 @@ locally created files carry no quarantine attribute.
 
 ## The programme
 
-Twelve levels, 83 tasks, 2,195 points — plus 50 mock tests of 20 questions each.
+Twelve levels, 90 tasks, 2,420 points — plus 50 mock tests of 20 questions each.
 **Everything is open from the first launch**: no level has to be unlocked, and
 any of the fifty papers can be sat on day one. The order below is a
 recommendation, not a gate.
@@ -103,7 +103,7 @@ recommendation, not a gate.
 | 5 | Looking data up | `VLOOKUP` exact and approximate, `INDEX`+`MATCH`, two-way lookup, `XLOOKUP` |
 | 6 | Text and dates | cleaning exports, splitting names, composite keys, quarters, `EOMONTH`, `DATEDIF` |
 | 7 | **Tables, sorting and filtering** | autofilter, multi-value filters, sorting, `SUBTOTAL`, concentration curves |
-| 8 | **Pivot tables** | rows/columns/values/filters, aggregations, % of total, calculated fields |
+| 8 | **Pivot tables** | the four areas, nesting and subtotals, grouping dates into quarters and months, sorting by value, Top N, % of row/column/grand total, calculated fields |
 | 9 | Financial calculations | discounting, `NPV`, `IRR`, `PMT`, unit economics, break-even |
 | 10 | Data analysis | `SUMPRODUCT` conditions, sensitivity tables, cohorts, scorecards, variance |
 | 11 | Consulting cases | market sizing both ways, price-volume-mix, the EBITDA bridge, capacity, pricing |
@@ -111,11 +111,13 @@ recommendation, not a gate.
 
 Alongside the levels:
 
-* **Shortcut dojo** — rapid-fire drills on 37 macOS Excel shortcuts, on which
-  function solves which problem, and on what each error code means. Answer with
-  the number keys; never touch the mouse.
+* **Shortcut dojo** — rapid-fire drills on 43 macOS Excel shortcuts, including
+  the pivot table commands, on which function solves which problem, and on what
+  each error code means. Answer with the number keys; never touch the mouse.
 * **Reference** — shortcuts side by side for macOS and Windows, functions with
-  their typical use, and the meaning of `#N/A`, `#VALUE!`, `#REF!` and the rest.
+  their typical use, a **pivot table** page covering every area, aggregation,
+  "show values as" mode and the grouping commands, and the meaning of `#N/A`,
+  `#VALUE!`, `#REF!` and the rest.
 * **Progress** — XP, daily streak, dojo accuracy, which of the fifty papers you
   have sat and passed, every sitting with its score and time, and a list of
   tasks worth revisiting.
@@ -142,7 +144,7 @@ quotas:
 | Analysis — shares of total, weighted averages, concentration, CAGR, `NPV`/`IRR`, break-even | 3 |
 | Sorting | 1 |
 | Filtering with `SUBTOTAL` | 1 |
-| Pivot tables — rows, columns, report filters, % of total, calculated fields | 2 |
+| Pivot tables — the four areas, date grouping, nesting, sorting by value, Top N, % of total, calculated fields | 2, drawn from a bank of 13 |
 
 So every paper covers everything the firm says it assesses, and no two papers
 ask the same question of the same numbers.
@@ -185,6 +187,44 @@ Solving a task opens a walkthrough with four parts:
    marks, and where the technique shows up in actual consulting work.
 
 ---
+
+## The pivot table builder
+
+Level 8 and every pivot question in the fifty papers are answered in a builder
+that is modelled on Excel's, because the point is that the habits transfer.
+
+<img src="docs/screenshot-pivot.png" alt="The pivot builder" width="100%">
+
+| In Excel | In the app |
+|---|---|
+| PivotTable Fields pane, docked right | the same, with a tick list and the four areas in a 2×2 below it |
+| Ticking a field sends text to Rows and numbers to Values | the same rule |
+| Drag between areas, reorder inside one, drag out to remove | all four work; every one also has a menu equivalent |
+| Right-click a field for sort, filter, group, settings | the ▾ on any chip, or right-click it |
+| Row Labels ▾ / Column Labels ▾ on the report | the same arrows, with the same menu behind them |
+| Value Field Settings: name, summary, show values as, number format | the same dialog |
+| Grouping: Years / Quarters / Months / Days, or numeric bands | the same dialog; ticking two boxes nests them |
+| Report Layout: Compact or Tabular; Subtotals; Grand Totals | on the strip above the report |
+| Refresh, because a pivot works off a snapshot | the report is built from a snapshot and the button says so when it goes stale |
+| Eleven ways to summarise a value field | all eleven, with Excel's captions — and `Count` means `COUNTA`, `Count Numbers` means `COUNT` |
+| Show values as: % of grand / row / column / parent total, running total, rank, index | all of them; the running total and the rank take the row fields as their base rather than asking |
+| Calculated fields over field names | the same, evaluated on each group's totals exactly as Excel evaluates them |
+
+What is deliberately **not** there: slicers, timelines, pivot charts,
+`GETPIVOTDATA`, calculated *items*, and drilling through to the source rows.
+The Reference page says what each of those does, because a question can ask
+about them, but none of them is a thing you do to answer this test.
+
+### Marking compares the report, not the wording
+
+Two pivots are the same answer when they group by the same fields in the same
+order, cover the same source rows, show the same labels in the same order and
+produce the same numbers. So `Count of Deal` and `Count of Revenue` both pass
+where either would do in Excel, a calculated field is marked on its arithmetic
+rather than on its spacing, a report filter with everything ticked is the same
+as no filter at all, and Compact and Tabular form are the same report. A
+transposed pivot, a missing filter and an unsorted one still fail — and the
+message says which area is wrong and what order it found.
 
 ## Nothing you do can cost you progress
 
@@ -280,8 +320,9 @@ npm test           # runs everything
 | Suite | What it checks |
 |---|---|
 | `tests/formula.test.js` | 122 checks on the engine, every expected value verified against Excel's behaviour |
-| `tests/curriculum.test.js` | 37,136 checks over the 83 tasks **and all 1,000 mock test questions**: every reference answer solves its task, raises no Excel error, and an untouched sheet fails; every address named in a task exists; every task has an explanation; every one of the 50 papers matches the published 20-question / 60-minute format and is reproducible from its number |
-| `tests/ui.test.js` | 81 checks in a real Chromium: typing formulas, `⌘D`, `⌘T`, `⌘Z`, sorting, filtering with `SUBTOTAL`, building and marking pivot tables, the explanation panel, the timed mock test, the guarantee that a failed retry never lowers a score, that every level and all 50 papers are open on a fresh install, that progress written to the file store survives the browser's own storage being wiped, and 133 tasks opening cleanly |
+| `tests/pivot.test.js` | 82 checks on the pivot engine against what Excel actually does: every aggregation, date and numeric grouping, nesting and subtotals, sorting by label and by value, Top N, all eleven "show values as" modes, number formats, and the rule that marking compares the report rather than the captions |
+| `tests/curriculum.test.js` | 37,580 checks over the 90 tasks **and all 1,000 mock test questions**: every reference answer solves its task, raises no Excel error, and an untouched sheet fails; every address named in a task exists; every task has an explanation; every one of the 50 papers matches the published 20-question / 60-minute format and is reproducible from its number; every reference pivot lines up with its own header and is still marked correct in Tabular form |
+| `tests/ui.test.js` | 132 checks in a real Chromium: typing formulas, `⌘D`, `⌘T`, `⌘Z`, sorting, filtering with `SUBTOTAL`, and the pivot builder end to end — ticking fields, dragging them between areas, grouping dates from the Group dialog, sorting by value, a Top N filter, Value Field Settings, nesting with subtotals in both layouts, and the check that the report has no phantom column — plus the explanation panel, the timed mock test, the guarantee that a failed retry never lowers a score, that every level and all 50 papers are open on a fresh install, that progress written to the file store survives the browser's own storage being wiped, and 140 tasks opening cleanly |
 
 ### Layout
 
@@ -289,14 +330,14 @@ npm test           # runs everything
 app/                 the application (also opens as a plain web page)
   js/formula.js      tokenizer, parser and interpreter for formulas
   js/engine.js       the sheet model: cells, recalculation, sorting, filters
-  js/pivot.js        the pivot table engine
+  js/pivot.js        the pivot engine: areas, grouping, sorting, subtotals, marking
   js/explain.js      takes a formula apart and explains it in plain English
   js/grader.js       marking, including sorting, filters and pivot layouts
   js/curriculum.js   12 levels and 83 tasks, each with its explanation
   js/mocktests.js    the bank: 50 mock papers of 20 questions, generated
   js/drills.js       the dojo: shortcuts, functions, errors
   js/grid.js         the interactive sheet with Excel's keyboard
-  js/pivotui.js      the pivot builder
+  js/pivotui.js      the pivot builder, laid out like Excel's field list
   js/app.js          screens and navigation
   js/storage.js      progress
 packaging/           server and progress store, launcher, native Swift window, icon
@@ -321,7 +362,13 @@ In `app/js/curriculum.js`, add an object to the level you want:
   expect: {                                 // optional, for non-formula work
     sortedBy: { col: 'F', asc: false },
     filtered: { col: 'B', values: ['Moscow'] },
-    pivot: { rows: ['Region'], values: [{ field: 'Revenue', agg: 'sum' }] }
+    pivot: {
+      source: 'A1:G21',
+      rows: ['Region'],                     // or { field, group, sort, filter }
+      cols: ['Industry'],
+      values: [{ field: 'Revenue', agg: 'sum', show: 'pctRow' }],
+      filters: [{ field: 'Stage', values: ['Won'] }]
+    }
   },
   check: { '*': { mustUse: ['SUMIFS'] } },
   explain: { idea: '…', walk: ['…'], mistakes: ['…'], onTheJob: '…' }

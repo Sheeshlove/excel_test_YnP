@@ -72,6 +72,53 @@
     return sp;
   }
 
+  /* ---------- dated order book (level 8: grouping dates and numbers) ------- */
+  // Two full years, so a pivot can group it by year, by quarter and by month.
+  var ORDER_HEAD = ['Date', 'Region', 'Product', 'Manager', 'Units', 'Price', 'Revenue'];
+  var ORDERS = [
+    ['12/01/2023', 'Moscow', 'Software', 'Ivanov', 120, 450, 54000],
+    ['28/02/2023', 'St Petersburg', 'Services', 'Petrova', 40, 1200, 48000],
+    ['14/03/2023', 'Urals', 'Hardware', 'Sidorov', 25, 3500, 87500],
+    ['03/04/2023', 'Moscow', 'Services', 'Volkova', 60, 1200, 72000],
+    ['22/05/2023', 'Siberia', 'Software', 'Ivanov', 80, 450, 36000],
+    ['09/06/2023', 'Moscow', 'Hardware', 'Petrova', 18, 3500, 63000],
+    ['17/07/2023', 'St Petersburg', 'Software', 'Sidorov', 150, 450, 67500],
+    ['30/08/2023', 'Urals', 'Services', 'Volkova', 35, 1200, 42000],
+    ['11/09/2023', 'Siberia', 'Hardware', 'Ivanov', 30, 3500, 105000],
+    ['26/10/2023', 'Moscow', 'Software', 'Petrova', 200, 450, 90000],
+    ['08/11/2023', 'St Petersburg', 'Hardware', 'Sidorov', 12, 3500, 42000],
+    ['19/12/2023', 'Urals', 'Software', 'Volkova', 90, 450, 40500],
+    ['16/01/2024', 'Moscow', 'Services', 'Ivanov', 75, 1200, 90000],
+    ['05/02/2024', 'Siberia', 'Services', 'Petrova', 50, 1200, 60000],
+    ['21/03/2024', 'Moscow', 'Hardware', 'Sidorov', 22, 3500, 77000],
+    ['07/04/2024', 'St Petersburg', 'Software', 'Volkova', 160, 450, 72000],
+    ['23/05/2024', 'Urals', 'Hardware', 'Ivanov', 16, 3500, 56000],
+    ['13/06/2024', 'Moscow', 'Software', 'Petrova', 140, 450, 63000],
+    ['02/07/2024', 'Siberia', 'Software', 'Sidorov', 110, 450, 49500],
+    ['18/08/2024', 'St Petersburg', 'Services', 'Volkova', 55, 1200, 66000],
+    ['29/09/2024', 'Urals', 'Services', 'Ivanov', 45, 1200, 54000],
+    ['10/10/2024', 'Moscow', 'Hardware', 'Petrova', 28, 3500, 98000],
+    ['24/11/2024', 'Siberia', 'Hardware', 'Sidorov', 20, 3500, 70000],
+    ['15/12/2024', 'St Petersburg', 'Software', 'Volkova', 130, 450, 58500]
+  ];
+  var ORDER_TABLE = 'A1:G25';
+  function orderSheet(extra, opts) {
+    var cells = {};
+    ORDER_HEAD.forEach(function (h, i) { cells[COLS[i] + '1'] = h; });
+    ORDERS.forEach(function (row, r) {
+      row.forEach(function (v, i) { cells[COLS[i] + (r + 2)] = v; });
+    });
+    Object.keys(extra || {}).forEach(function (k) { cells[k] = extra[k]; });
+    var sp = Object.assign({
+      rows: 28, cols: 14,
+      colWidths: { A: 110, B: 140, C: 110, D: 110, E: 80, F: 80, G: 110 },
+      styles: { 'A1:G1': H },
+      formats: { 'A2:A25': 'dd/mm/yyyy' }
+    }, opts || {});
+    sp.cells = cells;
+    return sp;
+  }
+
   /* ========================================================== LEVEL 1 ===== */
   LEVELS.push({
     id: 1,
@@ -1745,8 +1792,10 @@
       {
         id: '8.6', title: 'A calculated field', points: 35,
         mode: 'pivot',
-        brief: 'Gross profit is not a column in the data — it is Revenue multiplied by Margin. Build a pivot with Region in ROWS and a CALCULATED FIELD "Revenue * Margin" in VALUES.',
-        hint: 'In the Values area use "Add calculated field" and type the formula over field names: Revenue * Margin.',
+        brief: 'A calculated field works out something the source table does not contain. Build one: Region in ROWS ' +
+          'and a CALCULATED FIELD over the field names, Revenue * Margin, in VALUES. Then look hard at the number it gives you.',
+        hint: 'Use "Calculated Field" in the Values area and write the formula over the field names, exactly as they ' +
+          'appear in the header row: Revenue * Margin. The formula box is not case sensitive and the spacing does not matter.',
         sheet: dealSheet({}, {}),
         table: 'A1:G21',
         target: [],
@@ -1758,20 +1807,236 @@
           }
         },
         explain: {
-          idea: 'A calculated field lets the pivot compute something the source table does not contain. You write a formula using field NAMES instead of cell addresses, and the pivot applies it to every group.',
+          idea: 'A calculated field lets the pivot work out something the source table does not contain: you write a formula over field NAMES instead of cell addresses. The rule that decides whether the answer is any good is that the pivot applies the formula to each group’s TOTALS, not to each row.',
           walk: [
-            'Revenue * Margin is evaluated on the aggregated numbers of each group: for Moscow it is the total Moscow revenue times the total Moscow margin figure the pivot holds.',
-            'Moscow comes out around 75,240 of gross profit, Volga around 6,122 — a twelvefold gap on a fivefold revenue gap, so Moscow is not just bigger, it is richer.',
-            'The alternative would be adding a helper column to the source data and then pivoting that. Both are valid; the calculated field keeps the source table untouched, which matters when the source is a client extract you must not alter.',
-            'Field names are typed exactly as they appear in the header row. "revenue * margin" in the wrong case, or "Revenues", will not resolve.',
-            'One warning worth knowing: a calculated field works on the TOTALS of each group, not row by row. For sums and differences that is identical; for products and ratios it is not always what you want, and on a real project you would check a couple of groups by hand.'
+            'Moscow comes out at 75,240 — on revenue of 41,800. A gross profit of 180% of revenue is not a finding, it is a warning, and spotting it is the whole point of this task.',
+            'Here is why. The pivot does not multiply each deal’s revenue by its own margin and then add up. It adds the six Moscow revenues to 41,800, adds the six Moscow margins to 1.80 — 34% + 22% + 31% + 45% + 21% + 27%, a number that means nothing — and multiplies those two totals together.',
+            'The gross profit actually booked in Moscow is 11,963: 4,200 × 34% plus 9,500 × 22% and so on, deal by deal. The calculated field is out by a factor of six, and it is out by a different factor in every region, so even the ranking is not safe.',
+            'The fix is a helper column in the source data — one cell of =F2*G2 filled down — and then Sum of that column in the pivot. Sums and differences over totals are fine, which is why Revenue − Cost as a calculated field is perfectly correct; products and ratios of two source columns usually are not.',
+            'Ratios are the exception worth knowing: a calculated field of Revenue / Units gives the volume-weighted average price, which IS the right answer to "what did a unit sell for here", and is what you want far more often than the average of the per-row prices.'
           ],
           mistakes: [
-            'Expecting the calculated field to behave like a formula filled down the source table. It is applied after aggregation, not before.',
-            'Misspelling a field name — the field then evaluates as zero and the whole column comes out empty or wrong.',
-            'Building the calculation outside the pivot in an adjacent column. It looks the same until the pivot changes shape, and then the columns no longer line up.'
+            'Expecting a calculated field to behave like a formula filled down the source table. It is applied after aggregation, not before — and that is the single most common way a pivot produces a confident wrong number.',
+            'Not sanity-checking the result against the columns it was built from. Gross profit above revenue, a margin above 100%, a price per unit below cost: one glance catches all three.',
+            'Misspelling a field name. It then evaluates as zero rather than raising an error, so the column comes out wrong rather than obviously broken.'
           ],
-          onTheJob: 'Margin, profit per unit, cost per order, revenue per head — derived metrics are what the client actually asks about, and they are almost never a column in the raw extract.'
+          onTheJob: 'Margin, profit per unit, cost per order, revenue per head — derived metrics are what the client asks about and are almost never a column in the raw extract. Knowing which of them a calculated field can be trusted with, and which need a helper column, is the difference between a fast answer and a wrong one.'
+        }
+      }
+,
+      {
+        id: '8.7', title: 'Nest one field inside another', points: 30,
+        mode: 'pivot',
+        brief: 'Put Region into ROWS and then Industry into ROWS underneath it, with Sum of Revenue in VALUES. ' +
+          'You get a nested list with a subtotal for every region, not a matrix.',
+        hint: 'Drag Region into the Rows area first, then drag Industry into the same area, below it. ' +
+          'The order of the two chips is what decides which one is nested inside the other.',
+        sheet: dealSheet({}, {}),
+        table: 'A1:G21',
+        target: [],
+        solution: {},
+        expect: { pivot: { source: 'A1:G21', rows: ['Region', 'Industry'], cols: [],
+          values: [{ field: 'Revenue', agg: 'sum' }], filters: [] } },
+        explain: {
+          idea: 'Two fields in Rows nest: the second one breaks each group of the first one down further. Two fields across Rows and Columns cross instead. Same two fields, two completely different reports.',
+          walk: [
+            'Region is the outer field, so the report has one group per region. Industry is the inner field, so inside Moscow you get a line for each industry Moscow sells to.',
+            'Every region gets a subtotal line: Moscow 41,800, Siberia 21,250, St Petersburg 15,000, Urals 16,600, Volga 7,950. Those five add to the grand total of 102,600.',
+            'In Compact form — the default — the subtotal sits on the same line as the region name and the industries are indented underneath it. Switch Report Layout to Tabular form and the subtotal moves to the bottom of each group and is labelled "Moscow Total". Same numbers, and both are marked correct here.',
+            'Drag Industry above Region in the Rows area and the report inverts: industries at the top level, regions inside them. Nothing is lost, but the story changes from "what does each region sell" to "who buys each industry".',
+            'Compare this with task 8.2. There, Industry was in Columns and you got a five-by-five grid. Here it is in Rows and you get seventeen lines. The grid is better for spotting gaps; the nested list is better when the inner field has many values or when you want subtotals to read off.'
+          ],
+          mistakes: [
+            'Putting the two fields in the wrong order and not noticing. The outer field is the one at the top of the Rows area; if your report opens with Energy rather than Moscow, the chips are the wrong way round.',
+            'Reading a subtotal line as if it were a data line. "Moscow 41,800" is the total of the five lines under it, not a sixth deal.',
+            'Turning subtotals off and then trying to answer "how big is Moscow" by adding the indented lines up by hand.'
+          ],
+          onTheJob: 'A nested pivot is what you build when a partner asks "and what is inside that?" — region, then industry, then deal stage. It is the fastest way to walk down a hierarchy without building three separate tables.'
+        }
+      },
+      {
+        id: '8.8', title: 'Sort by the numbers, not the names', points: 30,
+        mode: 'pivot',
+        brief: 'Build revenue by region — Region in ROWS, Sum of Revenue in VALUES — and then sort it so the ' +
+          'biggest region is at the top rather than the alphabetically first one.',
+        hint: 'Use the ▾ arrow on the Row Labels header, or the chip menu, and choose More Sort Options — then sort Largest to Smallest by Sum of Revenue.',
+        sheet: dealSheet({}, {}),
+        table: 'A1:G21',
+        target: [],
+        solution: {},
+        expect: { pivot: { source: 'A1:G21',
+          rows: [{ field: 'Region', sort: { by: 'value', value: 0, asc: false } }], cols: [],
+          values: [{ field: 'Revenue', agg: 'sum' }], filters: [] } },
+        explain: {
+          idea: 'A pivot sorts its labels alphabetically until you tell it otherwise. Alphabetical order carries no information about the business, so almost every pivot that ends up on a slide has been sorted by its value field first.',
+          walk: [
+            'Unsorted, the report reads Moscow, Siberia, St Petersburg, Urals, Volga — the order of the Russian alphabet, which tells the reader nothing.',
+            'Sorted largest to smallest it reads Moscow 41,800, Siberia 21,250, Urals 16,600, St Petersburg 15,000, Volga 7,950. Now the first line is the finding.',
+            'The sort is a property of the field, not of the numbers on screen: change the data or the filter and the pivot re-sorts itself. That is the difference between this and sorting a plain range.',
+            'Sort Z to A is not the same thing. That sorts the labels backwards — Volga, Urals, St Petersburg — and has nothing to do with revenue.',
+            'With two fields in Rows, sorting the inner one sorts inside each group: the biggest industry within Moscow, then the biggest within Siberia, and so on.'
+          ],
+          mistakes: [
+            'Sorting the source data instead of the pivot. The pivot does not care what order the source rows are in; it re-groups them anyway.',
+            'Choosing Sort Z to A when the intention was largest first. On text labels those are different answers, and only one of them is about money.',
+            'Sorting by the wrong value field when there are two in the report — the dialog asks which one for a reason.'
+          ],
+          onTheJob: 'Every ranking slide — top regions, top products, top customers — is a pivot sorted by its value field. Getting used to doing it in the pivot rather than by hand is what keeps the ranking right after the data is refreshed.'
+        }
+      },
+      {
+        id: '8.9', title: 'Group dates into quarters', points: 35,
+        mode: 'pivot',
+        brief: 'This order book runs over two calendar years, one row per order. Build revenue by quarter: ' +
+          'put Date into ROWS, group it by quarters, and put Sum of Revenue into VALUES.',
+        hint: 'Drag Date into Rows. Every date then gets its own line, which is useless — so open the chip menu, ' +
+          'choose Group, and tick Quarters. That is Excel’s Group Field, and it is what the word "grouping" in the test brief means.',
+        sheet: orderSheet({}, {}),
+        table: ORDER_TABLE,
+        target: [],
+        solution: {},
+        expect: { pivot: { source: ORDER_TABLE,
+          rows: [{ field: 'Date', group: 'quarters' }], cols: [],
+          values: [{ field: 'Revenue', agg: 'sum' }], filters: [] } },
+        explain: {
+          idea: 'Raw dates are almost never what you want down the side of a report: twenty-four orders give twenty-four lines. Group Field turns a date column into years, quarters, months or days, and the pivot then groups by that instead.',
+          walk: [
+            'Dropped in ungrouped, Date produces one line per order — a list, not a report. That is the symptom that tells you to group.',
+            'Grouped by quarters the report collapses to four lines: "Q1" 416,500, "Q2" 362,000, "Q3" 384,000, "Q4" 399,000, adding to 1,561,500.',
+            'Notice what quarters alone does: it puts the first quarter of BOTH years on the same line. That is the right answer to "is the business seasonal" and the wrong answer to "how did we do last quarter". For the second question you need years as well, which is the next task.',
+            'The quarters come out in calendar order, not alphabetical order, because the pivot sorts on the underlying date and not on the label. A month-grouped pivot is the clearest proof of this: it runs Jan, Feb, Mar, not Apr, Aug, Dec.',
+            'Ungroup puts the raw dates back. Nothing was changed in the source data — grouping is a property of the report.'
+          ],
+          mistakes: [
+            'Trying to group a date column that Excel has read as text. If Group is greyed out, the dates are text; that is a data-cleaning job first, and level 6 is where it is taught.',
+            'Grouping by quarters when the question was about a specific year, and reporting a two-year number as if it were one year.',
+            'Building a helper column with QUARTER-style formulas when Group Field does it in three clicks — fine in a model, slow on a timed test.'
+          ],
+          onTheJob: 'Transaction extracts always arrive with a date stamp and never with a period column. Grouping dates is the first thing you do to one, and it is the single most common pivot operation in a commercial diagnostic.'
+        }
+      },
+      {
+        id: '8.10', title: 'Years outside, quarters inside', points: 35,
+        mode: 'pivot',
+        brief: 'Now answer "how did each quarter of each year do": put Date into ROWS and group it by years AND ' +
+          'quarters at the same time, with Sum of Revenue in VALUES.',
+        hint: 'In the Group dialog tick both Years and Quarters. Excel turns one date field into two fields, ' +
+          'Years on the outside and Quarters nested inside it.',
+        sheet: orderSheet({}, {}),
+        table: ORDER_TABLE,
+        target: [],
+        solution: {},
+        expect: { pivot: { source: ORDER_TABLE,
+          rows: [{ field: 'Date', group: 'years' }, { field: 'Date', group: 'quarters' }], cols: [],
+          values: [{ field: 'Revenue', agg: 'sum' }], filters: [] } },
+        explain: {
+          idea: 'Ticking more than one box in the Group dialog does not give you one cleverer field — it gives you several fields, nested. Years on the outside, quarters inside, which is exactly the shape of a quarterly trend table.',
+          walk: [
+            'The report now has two levels: a line per year, and four lines inside each of them.',
+            'The first year totals 747,500 and the second 814,000 — growth of about 8.9%, which the single-level quarterly view from the previous task could not have shown you at all.',
+            'Inside the first year the quarters run 189,500, 171,000, 214,500, 172,500. Inside the second: 227,000, 191,000, 169,500, 226,500. The third quarter is the one that went backwards, and that is the finding.',
+            'Drag the two chips the other way round — quarters outside, years inside — and you get the comparison view instead: each quarter with its two years side by side under it. Both are legitimate; they answer different questions.',
+            'The same dialog offers Months and Days. Years plus months is the standard monthly trend; years plus quarters is the standard board pack.'
+          ],
+          mistakes: [
+            'Ticking only Quarters and then talking about "last quarter" — the line is the average of two different years.',
+            'Ticking Years, Quarters and Months together on a two-year extract and producing a seventy-line report nobody will read.',
+            'Forgetting that the year subtotal is a subtotal. It belongs to the year, not to a quarter.'
+          ],
+          onTheJob: 'Year over year by quarter is the first exhibit in most commercial due diligence. Being able to produce it from a raw transaction list in under a minute is a large part of what "good at Excel" means on an engagement.'
+        }
+      },
+      {
+        id: '8.11', title: 'Read a grid in percentages', points: 35,
+        mode: 'pivot',
+        brief: 'Put Region into ROWS, Product into COLUMNS and Revenue into VALUES, and then show each number ' +
+          'as a percentage of its ROW total, so that every region’s product mix adds to 100%.',
+        hint: 'Open Value Field Settings on the value chip and set "Show values as" to % of row total. ' +
+          'With a field in Columns this is a genuinely different answer from % of grand total.',
+        sheet: orderSheet({}, {}),
+        table: ORDER_TABLE,
+        target: [],
+        solution: {},
+        expect: { pivot: { source: ORDER_TABLE,
+          rows: ['Region'], cols: ['Product'],
+          values: [{ field: 'Revenue', agg: 'sum', show: 'pctRow' }], filters: [] } },
+        explain: {
+          idea: 'In a two-dimensional pivot, "% of grand total", "% of row total" and "% of column total" answer three different questions from the same numbers. Row total is the one that gives you a mix per row.',
+          walk: [
+            'Each row now adds to 100%: that is the product mix of one region, and the Grand Total column is 100% all the way down.',
+            'Moscow reads Hardware 39.2%, Services 26.7%, Software 34.1% — a fairly even spread. The Urals reads Hardware 51.2%, Services 34.3%, Software 14.5%: half its revenue is one product.',
+            'Switch to % of column total and the question flips to "where does each product sell", with each column adding to 100%. Switch to % of grand total and every cell is measured against 1,561,500, so the whole grid adds to 100% once.',
+            'Task 8.4 warned that % of row total in a pivot with no column field makes every row 100% of itself. Here there IS a column field, so the same setting finally earns its keep.',
+            'The percentages are formatted as percentages because the report knows they are shares. Switch back to No calculation and the amounts return, formatted as amounts.'
+          ],
+          mistakes: [
+            'Choosing % of column total when the sentence you want to write starts "of the Urals’ revenue…". Whichever one your sentence is about is the one that must add to 100%.',
+            'Reporting a mix without the size beside it. Fifty-one per cent of a small region is a smaller number than fourteen per cent of a large one.',
+            'Reading the Grand Total column as meaningful. In a % of row total report it is 100% by construction and says nothing.'
+          ],
+          onTheJob: 'Mix tables are how you show that two regions of similar size are actually completely different businesses — which is usually the reason the client cannot work out why one of them is less profitable.'
+        }
+      },
+      {
+        id: '8.12', title: 'Keep only the top three', points: 30,
+        mode: 'pivot',
+        brief: 'Build revenue by region from the order book, then apply a Top 3 filter so that only the three ' +
+          'largest regions are left in the report.',
+        hint: 'Use the ▾ arrow on Row Labels, or the chip menu, and choose Top 10 — the dialog lets you set the ' +
+          'number to 3 and pick which value field to rank by.',
+        sheet: orderSheet({}, {}),
+        table: ORDER_TABLE,
+        target: [],
+        solution: {},
+        expect: { pivot: { source: ORDER_TABLE,
+          rows: [{ field: 'Region', filter: { top: { n: 3, value: 0, largest: true } } }], cols: [],
+          values: [{ field: 'Revenue', agg: 'sum' }], filters: [] } },
+        explain: {
+          idea: 'A value filter keeps the N biggest — or smallest — items of a field and drops the rest. It is the pivot answer to "just show me the ones that matter".',
+          walk: [
+            'All four regions total 1,561,500. The Top 3 filter keeps Moscow 607,000, Siberia 320,500 and St Petersburg 354,000, and drops the Urals.',
+            'Watch the grand total: it falls to 1,281,500. This is the thing to understand about a value filter — the dropped rows leave the report completely, so every total is now a total of what survived, not of the business.',
+            'That is 82.1% of the revenue in three regions out of four, which is a concentration statement you can put on a slide — provided you say that it is three of four.',
+            'Bottom 3 works the same way in the other direction, and the dialog lets you rank by any value field in the report, not only the first.',
+            'A Top N filter and a sort are independent: filtering to the top three does not put them in order. If the question asks for a ranking, sort as well.'
+          ],
+          mistakes: [
+            'Quoting the filtered grand total as the total. It is not — it is the total of the three regions you kept.',
+            'Confusing Top 10 with "the ten largest rows of source data". It ranks the groups of the field you applied it to, not the underlying records.',
+            'Applying it to a field with only two or three values, where it hides one item and saves nobody any reading.'
+          ],
+          onTheJob: '"Top ten customers" is on the first page of almost every commercial diagnostic, and it is always followed by "…which is what share of revenue?". The filter gives you the first number; the unfiltered total gives you the second, so do not lose it.'
+        }
+      },
+      {
+        id: '8.13', title: 'The biggest and the smallest order', points: 30,
+        mode: 'pivot',
+        brief: 'Put Region into ROWS and Revenue into VALUES twice: once summarised as Max, once as Min. ' +
+          'The report should show the largest and the smallest single order in each region.',
+        hint: 'Add Revenue to the Values area twice, then use Value Field Settings on each chip to summarise one ' +
+          'by Max and the other by Min.',
+        sheet: orderSheet({}, {}),
+        table: ORDER_TABLE,
+        target: [],
+        solution: {},
+        expect: { pivot: { source: ORDER_TABLE,
+          rows: ['Region'], cols: [],
+          values: [{ field: 'Revenue', agg: 'max' }, { field: 'Revenue', agg: 'min' }], filters: [] } },
+        explain: {
+          idea: 'Sum and Average describe the middle of a group. Max and Min describe its edges — and on a small book of orders, the edges are usually where the story is.',
+          walk: [
+            'Moscow runs from 54,000 to 98,000, Siberia from 36,000 to 105,000. Siberia is the smaller region by revenue but contains the single largest order in the book.',
+            'A Max and Min pair next to a Sum is the standard test for whether an average means anything. Where the two edges are close, the average describes the group; where they are far apart, it describes nobody.',
+            'Both columns read the same source field. The same field can sit in the Values area as many times as you like, summarised differently each time — that is what the Values area is for.',
+            'The Grand Total line shows the max and min across the whole book, 105,000 and 36,000, not the max and min of the four lines above it.',
+            'Excel offers eleven ways to summarise a value field, and the Value Field Settings dialog is where they all live: Sum, Count, Average, Max, Min, Product, Count Numbers, StdDev, StdDevp, Var and Varp.'
+          ],
+          mistakes: [
+            'Reading Max as "the region total". It is one order.',
+            'Expecting the Grand Total of a Min column to be the smallest of the four numbers above it by coincidence — it is computed from the raw orders, and it usually is the same number, but for Average it is not.',
+            'Adding the field twice and forgetting to change the second one, so the report shows the same column twice.'
+          ],
+          onTheJob: 'Deal size distribution — biggest, smallest, average, count — is the first cut of any pricing or discounting question, and it is four dropdowns in one pivot.'
         }
       }
     ]

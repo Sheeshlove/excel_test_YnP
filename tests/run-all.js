@@ -4,6 +4,7 @@ const path = require('path');
 
 const suites = [
   ['Formula engine', 'formula.test.js'],
+  ['Pivot engine', 'pivot.test.js'],
   ['Training programme', 'curriculum.test.js'],
   ['Interface (real browser)', 'ui.test.js']
 ];

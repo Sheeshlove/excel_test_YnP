@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node tests/run-all.js",
     "test:formula": "node tests/formula.test.js",
+    "test:pivot": "node tests/pivot.test.js",
     "test:curriculum": "node tests/curriculum.test.js",
     "test:ui": "node tests/ui.test.js",
     "start": "./run.sh",
